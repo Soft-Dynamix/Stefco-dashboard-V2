@@ -8,6 +8,7 @@ export type ExtractableField =
   | "clientEmail"
   | "clientPhone"
   | "vehicleRegistration"
+  | "vehicleVinNumber"
   | "vehicleMake"
   | "vehicleModel"
   | "propertyAddress"
@@ -97,7 +98,11 @@ function generatePatternHint(
     vehicleRegistration: [
       /(?:vehicle|reg(?:istration)?)\s*(?:no|number|#)?[:\s]*$/i,
       /reg[:\s]*$/i,
+    ],
+    vehicleVinNumber: [
       /(?:vin|chassis)\s*(?:no|number|#)?[:\s]*$/i,
+      /chassis[:\s]*$/i,
+      /vin[:\s]*$/i,
     ],
     excessAmount: [
       /excess[:\s]*$/i,
@@ -210,6 +215,7 @@ function generatePatternFromExamples(
       policyNumber: "([A-Z]{2,4}[-/]?\\d{6,12})",
       clientName: "([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+)",
       vehicleRegistration: "([A-Z]{2,3}\\d{3}[A-Z]{0,2}|\\d{3}[A-Z]{3}\\d{2})",
+      vehicleVinNumber: "([A-HJ-NPR-Z0-9]{17})",
       excessAmount: "(R?\\s*[\\d,]+\\.?\\d{0,2})",
     };
 
@@ -267,6 +273,7 @@ export async function extractWithPatterns(
     "policyNumber",
     "clientName",
     "vehicleRegistration",
+    "vehicleVinNumber",
     "excessAmount",
   ].filter((f) => !extractedFields.includes(f)) as ExtractableField[];
 
@@ -331,8 +338,12 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
       description: "Generic name pattern",
     },
     vehicleRegistration: {
-      pattern: /(?:vehicle|reg(?:istration)?|vin|chassis)\s*(?:no|number|#)?[:\s]*([A-Z]{2,3}\d{3}[A-Z]{0,2}|\d{3}[A-Z]{3}\d{2}|[A-HJ-NPR-Z0-9]{17})/i,
-      description: "SA vehicle registration or VIN/Chassis number pattern",
+      pattern: /(?:vehicle|reg(?:istration)?)\s*(?:no|number|#)?[:\s]*([A-Z]{2,3}\d{3}[A-Z]{0,2}|\d{3}[A-Z]{3}\d{2})/i,
+      description: "SA vehicle registration pattern",
+    },
+    vehicleVinNumber: {
+      pattern: /(?:vin|chassis)\s*(?:no|number|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
+      description: "VIN/Chassis number pattern (17 alphanumeric characters)",
     },
     excessAmount: {
       pattern: /excess[:\s]*(R?\s*[\d,]+\.?\d{0,2})/i,

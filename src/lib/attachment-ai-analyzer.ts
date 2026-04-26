@@ -1871,7 +1871,8 @@ export async function performUnifiedAnalysis(
     
     if (docType === "QUOTATION") {
       hints.push("QUOTATION: Extract VIN NUMBER/CHASSIS NUMBER and REGISTRATION NUMBER - these identify the correct vehicle on the policy schedule");
-      hints.push("Look for: vehicle details, make, model, year, VIN, registration number");
+      hints.push("Look for labels: 'Chassis No:', 'Chassis Number:', 'VIN:', 'VIN No:', 'VIN Number:'");
+      hints.push("Look for: vehicle details, make, model, year, VIN/chassis number, registration number");
     } else if (docType === "CLAIM_FORM") {
       hints.push("CLAIM FORM: Extract INCIDENT DATE, claim details, driver info, third party info");
       hints.push("Look for: incident date/time/location, description of event, driver details, third party details");
@@ -1922,7 +1923,7 @@ Determine the claim type by analyzing:
 
 **MOTOR CLAIMS - Required Information:**
 - Vehicle Registration Number (SA format: XX XX GP, XX-XX-GP)
-- Vehicle VIN Number (17 characters)
+- Vehicle VIN Number (17 characters) - also labeled as "Chassis No" or "Chassis Number"
 - Vehicle Make, Model, Year, Color
 - Driver Name and ID (if different from policy holder)
 - Incident Date, Time, Location
@@ -1971,6 +1972,7 @@ Determine the claim type by analyzing:
 - If there are conflicts, prefer attachment data for claim details
 - Be thorough - check ALL attachments for relevant information
 - South African formats: vehicle reg (XX XX GP, XX-XX-GP), phone (+27/0 prefix), ID (13 digits)
+- VIN/Chassis Number: Look for labels "Chassis No:", "Chassis Number:", "VIN:", "VIN No:" - these are the same thing (17 alphanumeric characters)
 
 === MISSING INFORMATION CHECKLIST BY CLAIM TYPE ===
 
