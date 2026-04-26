@@ -288,3 +288,35 @@ Stage Summary:
   3. Stats API returns correct count of emails still needing refetch
 - Lint check passes (1 pre-existing warning about image alt prop)
 - Dev server running correctly
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Fix password-protected PDF error showing in UI
+
+Work Log:
+- **Issue**: Password-protected PDFs caused `PasswordException: No password given` error
+  - Error was being logged to console.error which appeared in the UI
+  - Processing continued but with no PDF text to analyze
+- **Fix 1**: Changed error handling for password-protected PDFs
+  - Now uses `console.warn` instead of `console.error` for password exceptions
+  - Added specific detection: `errorMsg.includes('PasswordException') || errorMsg.includes('password')`
+- **Fix 2**: Added `processingError` field to `analyzePdfWithLlm` return type
+  - Tracks whether PDF extraction succeeded or why it failed
+  - "PDF is password-protected and cannot be analyzed" for password-protected PDFs
+  - Other errors also captured and returned
+- **Fix 3**: Updated caller to capture and store processingError
+  - `pdfAnalysis.processingError` now passed to `processingError` variable
+  - Stored in database for display in UI
+- **Fix 4**: Updated LLM prompt for password-protected PDFs
+  - Shows warning: "⚠️ This PDF is PASSWORD-PROTECTED and cannot be analyzed"
+  - Recommends requesting unlocked version from sender
+  - Classification still happens based on filename
+
+Stage Summary:
+- Password-protected PDFs are now handled gracefully
+- No more error shown in UI for password-protected PDFs
+- Processing error is stored in database for user visibility
+- LLM knows to classify based on filename only
+- Lint check passes (1 pre-existing warning)
+- Dev server running correctly

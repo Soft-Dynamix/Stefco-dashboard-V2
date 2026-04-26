@@ -885,6 +885,11 @@ export async function analyzeAttachment(
         classification = pdfAnalysis.classification;
         rawExtractedText = pdfAnalysis.extractedText;
         
+        // Capture any PDF extraction errors (e.g., password-protected PDFs)
+        if (pdfAnalysis.processingError) {
+          processingError = pdfAnalysis.processingError;
+        }
+        
         if (classification.documentType === "CLAIM_FORM" && pdfAnalysis.claimData) {
           claimFormData = pdfAnalysis.claimData;
         } else if (classification.documentType === "POLICY_SCHEDULE" && pdfAnalysis.policyData) {
@@ -1088,6 +1093,7 @@ async function analyzePdfWithLlm(
   extractedText: string;
   claimData?: ClaimFormData;
   policyData?: PolicyScheduleData;
+  processingError?: string;
 }> {
   const zai = await getZAI();
   
@@ -1099,6 +1105,7 @@ async function analyzePdfWithLlm(
   
   // Extract text from PDF
   let pdfText = "";
+  let pdfExtractionError: string | undefined;
   try {
     if (base64Content) {
       const pdfBuffer = Buffer.from(base64Content, 'base64');
@@ -1121,12 +1128,32 @@ async function analyzePdfWithLlm(
       console.log(`[analyzePdfWithLlm] Extracted ${pdfText.length} chars of text from PDF`);
     }
   } catch (pdfError) {
-    console.error(`[analyzePdfWithLlm] Failed to extract PDF text:`, pdfError);
+    // Check if this is a password-protected PDF
+    const errorMsg = String(pdfError);
+    if (errorMsg.includes('PasswordException') || errorMsg.includes('password')) {
+      console.warn(`[analyzePdfWithLlm] PDF is password-protected, skipping text extraction: ${fileName}`);
+      pdfExtractionError = "PDF is password-protected and cannot be analyzed";
+    } else {
+      console.error(`[analyzePdfWithLlm] Failed to extract PDF text:`, pdfError);
+      pdfExtractionError = `Failed to extract PDF text: ${errorMsg}`;
+    }
   }
   
   // No truncation - extract ALL text from PDF for comprehensive analysis
   // Vehicle details could be anywhere in the document
   const fullText = pdfText;
+  
+  // Build the text content section for the prompt
+  let textContentSection: string;
+  if (pdfExtractionError && pdfExtractionError.includes('password')) {
+    textContentSection = '⚠️ This PDF is PASSWORD-PROTECTED and cannot be analyzed. Classification is based on filename only. Recommend requesting an unlocked version from the sender.';
+  } else if (pdfText) {
+    textContentSection = `--- PDF TEXT CONTENT ---
+${fullText}
+--- END PDF TEXT ---`;
+  } else {
+    textContentSection = '(No text could be extracted from this PDF - analyze based on filename only)';
+  }
   
   // Use LLM to analyze the PDF content
   const classificationPrompt = `You are an expert insurance document analyzer for South African insurance companies.
@@ -1136,9 +1163,7 @@ Analyze this PDF document and extract ALL relevant information.
 Document filename: ${fileName}
 ${companyContext ? `Source: ${companyContext}` : ''}
 
-${pdfText ? `--- PDF TEXT CONTENT ---
-${fullText}
---- END PDF TEXT ---` : '(No text could be extracted from this PDF - analyze based on filename only)'}
+${textContentSection}
 
 === CRITICAL: EXTRACT FROM ALL DOCUMENT TYPES ===
 
@@ -1423,7 +1448,8 @@ Respond in JSON format:
         classification,
         extractedText: pdfText || `Filename: ${fileName}`,
         claimData,
-        policyData
+        policyData,
+        processingError: pdfExtractionError
       };
     }
   } catch (error) {
@@ -1431,7 +1457,10 @@ Respond in JSON format:
   }
   
   // Fallback: Use basic classification based on filename
-  return classifyPdfByFilename(fileName);
+  return {
+    ...classifyPdfByFilename(fileName),
+    processingError: pdfExtractionError
+  };
 }
 
 /**
