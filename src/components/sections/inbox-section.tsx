@@ -971,7 +971,7 @@ export function InboxSection() {
 
       {/* Email Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-[100vw] w-[100vw] h-[96vh] p-0 gap-0 flex flex-col rounded-none border-0">
+        <DialogContent className="max-w-none w-screen h-[96vh] p-0 gap-0 flex flex-col rounded-none border-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
