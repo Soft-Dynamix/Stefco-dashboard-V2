@@ -1,0 +1,7 @@
+{
+  "name": "dev-server",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun index.ts"
+  }
+}

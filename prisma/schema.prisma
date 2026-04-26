@@ -1,0 +1,1099 @@
+// STEFCO Claims Dashboard - Complete Database Schema
+// Version 1.0.0
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// CORE MODELS
+// =============================================================================
+
+/// Insurance company registry with domain mappings
+model InsuranceCompany {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  shortName     String?
+  folderName    String   // Folder name for file organization
+  senderDomains String?  // JSON array of sender email domains
+  contactEmail  String?
+  contactPhone  String?
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  claims        Claim[]
+  learningPatterns LearningPattern[]
+  classificationKnowledge ClassificationKnowledge[]
+  extractionPatterns ExtractionPattern[]
+
+  @@map("insurance_companies")
+}
+
+/// Central claim record with all extracted and user-verified data
+model Claim {
+  id                    String   @id @default(cuid())
+  claimNumber           String   @unique
+  clientName            String?
+  clientEmail           String?
+  clientPhone           String?
+  claimType             String?  // MOTOR, PROPERTY, LIABILITY, etc.
+  incidentDate          DateTime?
+  incidentDescription   String?
+  vehicleRegistration   String?
+  vehicleMake           String?
+  vehicleModel          String?
+  propertyAddress       String?
+  excessAmount          Float?
+  status                String   @default("NEW") // NEW, IN_PROGRESS, PENDING_INFO, COMPLETED, CLOSED
+  processingStage       String   @default("INTAKE") // INTAKE, CLASSIFIED, EXTRACTED, REVIEWED, PROCESSED, ARCHIVED
+  
+  // AI confidence scores
+  classificationConfidence Float?
+  extractionConfidence     Float?
+  
+  // Source tracking
+  sourceEmailId        String?
+  sourceEmailSubject   String?
+  sourceEmailFrom      String?
+  sourceEmailDate      DateTime?
+  
+  // Relationships
+  insuranceCompanyId   String?
+  insuranceCompany     InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
+  
+  // Processing metadata
+  processedBy          String?  // AUTO or user ID
+  processedAt          DateTime?
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  
+  // Timestamps
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  feedback             ClaimFeedback[]
+  notes                ClaimNote[]
+  auditLogs            AuditLog[]
+  printQueueItems      PrintQueueItem[]
+
+  @@index([claimNumber])
+  @@index([status])
+  @@index([insuranceCompanyId])
+  @@map("claims")
+}
+
+/// Claim notes for internal communication
+model ClaimNote {
+  id        String   @id @default(cuid())
+  claimId   String
+  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  content   String
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@map("claim_notes")
+}
+
+/// User feedback on claim accuracy
+model ClaimFeedback {
+  id              String   @id @default(cuid())
+  claimId         String
+  claim           Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  feedbackType    String   // confirmed, flagged, corrected
+  fieldName       String?  // Which field was corrected
+  originalValue   String?  // AI extracted value
+  correctedValue  String?  // User corrected value
+  notes           String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+
+  @@map("claim_feedback")
+}
+
+/// Structured feedback when emails are rejected/ignored
+model RejectionFeedback {
+  id                String   @id @default(cuid())
+  emailQueueId      String
+  
+  // Classification at time of rejection
+  originalClassification  String?  // What AI thought
+  originalConfidence     Float?
+  
+  // Why it was rejected
+  rejectionCategory String   // duplicate, follow_up, spam, marketing, wrong_sender, not_a_claim, already_processed, test_email, other
+  rejectionReason   String?  // Free text explanation
+  
+  // Thread detection info
+  isFollowUp        Boolean  @default(false)
+  relatedClaimId    String?  // If this was a follow-up to existing claim
+  threadSubject     String?  // Normalized subject for thread matching
+  
+  // Learning hints for future
+  suggestedRule     String?  // e.g., "Ignore 'Re:' emails from this sender"
+  applyToSender     Boolean  @default(false)  // Create ignore rule for sender?
+  
+  // Metadata
+  emailSubject      String?
+  emailFrom         String?
+  emailFromDomain   String?
+  
+  createdBy         String?
+  createdAt         DateTime @default(now())
+
+  @@index([rejectionCategory])
+  @@index([emailFromDomain])
+  @@map("rejection_feedback")
+}
+
+/// Thread detection patterns - learned from follow-up emails
+model ThreadPattern {
+  id                String   @id @default(cuid())
+  senderDomain      String
+  
+  // Pattern details
+  subjectPrefix     String?  // e.g., "Re:", "FWD:", "RE:"
+  normalizedSubject String?  // Subject without prefixes
+  
+  // How often this pattern indicates follow-up
+  followUpCount     Int      @default(0)
+  newClaimCount     Int      @default(0)
+  isFollowUpProbability Float @default(0)
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([senderDomain, normalizedSubject])
+  @@map("thread_patterns")
+}
+
+// =============================================================================
+// EMAIL PROCESSING MODELS
+// =============================================================================
+
+/// Emails awaiting processing or human review
+model EmailQueue {
+  id                String   @id @default(cuid())
+  messageId         String   @unique  // SHA-256 hash of subject + body
+  
+  // Email content
+  subject           String?
+  from              String?
+  fromDomain        String?
+  to                String?
+  bodyText          String?
+  bodyHtml          String?
+  
+  // Attachments info
+  attachments       String?  // JSON array of attachment metadata
+  
+  // AI analysis results
+  aiClassification  String?  // NEW_CLAIM, IGNORE, MISSING_INFO, OTHER
+  aiConfidence      Float?
+  aiReasoning       String?
+  aiExtractedData   String?  // JSON of extracted fields
+  
+  // Processing status
+  status            String   @default("PENDING") // PENDING, AI_ANALYZED, USER_REVIEWING, CLAIM_CREATED, IGNORED
+  processingRoute   String?  // auto_create, ai_suggest, manual_review
+  
+  // Learning hints applied
+  learningHintsCount Int     @default(0)
+  
+  // Result tracking
+  createdClaimId    String?
+  ignoreReason      String?
+  ignoreCategory    String?
+  
+  // Timestamps
+  emailDate         DateTime?
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime?
+  
+  // Relationships
+  predictions       Prediction[]
+
+  @@index([status])
+  @@index([fromDomain])
+  @@map("email_queue")
+}
+
+/// Full AI prediction with alternatives and reasoning
+model Prediction {
+  id                String   @id @default(cuid())
+  emailQueueId      String
+  emailQueue        EmailQueue @relation(fields: [emailQueueId], references: [id], onDelete: Cascade)
+  
+  predictedClass    String
+  confidence        Float
+  alternatives      String?  // JSON array of alternative predictions
+  reasoning         String?
+  decision          String?  // proceed, review, reject
+  
+  // Extracted fields
+  extractedFields   String?  // JSON of extracted data
+  
+  // Learning context
+  learningHintsCount Int     @default(0)
+  senderPatternsCount Int    @default(0)
+  
+  createdAt         DateTime @default(now())
+
+  @@map("predictions")
+}
+
+/// Preprocessed signals from emails
+model ExtractedEntity {
+  id                    String   @id @default(cuid())
+  emailQueueId          String?
+  
+  // Extracted signals
+  possibleClaimNumbers  String?  // JSON array
+  personNames           String?  // JSON array
+  dates                 String?  // JSON array
+  phoneNumbers          String?  // JSON array
+  emailAddresses        String?  // JSON array
+  keywords              String?  // JSON array
+  monetaryAmounts       String?  // JSON array
+  addresses             String?  // JSON array
+  
+  // Metadata
+  confidence            Float?
+  createdAt             DateTime @default(now())
+
+  @@map("extracted_entities")
+}
+
+// =============================================================================
+// LEARNING ENGINE MODELS
+// =============================================================================
+
+/// Learned extraction patterns per sender domain
+model LearningPattern {
+  id                String   @id @default(cuid())
+  senderDomain      String
+  insuranceCompanyId String?
+  insuranceCompany  InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
+  
+  // Pattern details
+  fieldName         String   // clientName, claimNumber, etc.
+  patternHint       String   // Human-readable description
+  exampleOriginal   String?  // Example of original extraction
+  exampleCorrected  String?  // Example of corrected value
+  
+  // Confidence scoring
+  confidence        Int      @default(55) // 50-95 scale
+  correctionCount   Int      @default(1)
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([senderDomain, fieldName])
+  @@index([senderDomain])
+  @@map("learning_patterns")
+}
+
+/// Few-shot examples for AI classifier training
+model ClassificationKnowledge {
+  id                    String   @id @default(cuid())
+  senderDomain          String
+  subject               String?
+  bodySnippet           String?  // First 200 chars or key snippet
+  
+  originalClassification String?
+  correctedClassification String
+  
+  confidence            Float?
+  isActive              Boolean  @default(true)
+  
+  insuranceCompanyId    String?
+  insuranceCompany      InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([senderDomain])
+  @@map("classification_knowledge")
+}
+
+/// Aggregated statistics per sender domain
+model SenderPattern {
+  id                String   @id @default(cuid())
+  senderDomain      String   @unique
+  
+  // Statistics
+  totalEmails       Int      @default(0)
+  newClaimCount     Int      @default(0)
+  ignoreCount       Int      @default(0)
+  otherCount        Int      @default(0)
+  
+  // Accuracy tracking
+  correctCount      Int      @default(0)
+  correctedCount    Int      @default(0)
+  accuracyRate      Float    @default(0)
+  
+  // Automation level
+  automationLevel   String   @default("manual") // manual, semi_auto, auto
+  
+  // Hints for AI
+  classificationHints String?  // JSON array of learned hints
+  
+  // Confidence scoring
+  confidenceScore   Float    @default(0)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("sender_patterns")
+}
+
+/// Sender learning profile for progressive automation
+model SenderLearningProfile {
+  id                String   @id @default(cuid())
+  senderDomain      String   @unique
+  
+  // Pattern counts
+  patternCount      Int      @default(0)
+  classificationCount Int    @default(0)
+  
+  // Accuracy metrics
+  correctClassifications Int @default(0)
+  totalClassifications    Int @default(0)
+  accuracyRate           Float @default(0)
+  
+  // Automation tier
+  automationLevel   String   @default("manual") // manual, semi_auto, auto
+  
+  // Composite confidence
+  confidenceScore   Float    @default(0)
+  
+  // Timestamps
+  lastEmailAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("sender_learning_profiles")
+}
+
+/// Auto-ignore rules for non-claim email senders
+model SenderIgnoreRule {
+  id            String   @id @default(cuid())
+  senderDomain  String
+  category      String   // spam, marketing, duplicate, wrong_sender, personal, out_of_office, system_notification, other
+  reason        String?
+  ignoreCount   Int      @default(1)
+  appliedCount  Int      @default(0)  // How many times this rule has been applied
+  isActive      Boolean  @default(true)
+  autoIgnore    Boolean  @default(false)  // Auto-ignore after threshold
+  lastAppliedAt DateTime?  // When this rule was last applied
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([senderDomain, category])
+  @@map("sender_ignore_rules")
+}
+
+// =============================================================================
+// AUTO-DETECTION & SUGGESTION MODELS
+// =============================================================================
+
+/// Suggested domain-to-company mappings awaiting review
+model DomainSuggestion {
+  id                  String   @id @default(cuid())
+  senderDomain        String   @unique
+  
+  // Detected from email content
+  detectedCompanyName String?  // Company name found in email signature/content
+  detectedFromEmail   String?  // Original email address
+  detectedFromName    String?  // Sender display name
+  
+  // AI suggestion
+  suggestedCompanyId  String?  // Link to existing company if match found
+  suggestedCompanyName String? // Suggested new company name
+  confidenceScore     Float    @default(0)
+  
+  // Evidence
+  emailCount          Int      @default(1)  // How many emails from this domain
+  claimCount          Int      @default(0)  // How many claims created
+  sampleSubjects      String?  // JSON array of sample email subjects
+  
+  // Status
+  status              String   @default("pending") // pending, approved, rejected, auto_approved
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  
+  // Final mapping
+  linkedCompanyId     String?
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@map("domain_suggestions")
+}
+
+/// Patterns for auto-detecting insurance companies from domain names
+model CompanyDetectionPattern {
+  id              String   @id @default(cuid())
+  
+  // Pattern matching
+  domainPattern   String   @unique  // e.g., "*.santam.co.za", "claims.*.com"
+  companyNameHint String?  // Regex or hint to extract company name
+  
+  // Mapping
+  insuranceCompanyId String?
+  
+  // Statistics
+  matchCount      Int      @default(0)
+  successRate     Float    @default(0)
+  
+  isActive        Boolean  @default(true)
+  autoApprove     Boolean  @default(false)  // Auto-approve if confidence > 90%
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("company_detection_patterns")
+}
+
+/// Known insurance company domain patterns (seeded data)
+model InsuranceDomainKnowledge {
+  id              String   @id @default(cuid())
+  domainPattern   String   @unique  // e.g., "santam.co.za", "outsurance.co.za"
+  companyName     String   // Official company name
+  shortName       String?  // Common short name
+  country         String   @default("ZA")  // Country code
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("insurance_domain_knowledge")
+}
+
+// =============================================================================
+// EXTRACTION PATTERN LEARNING MODELS
+// =============================================================================
+
+/// Company-specific extraction patterns for each field type
+model ExtractionPattern {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String
+  insuranceCompany    InsuranceCompany @relation(fields: [insuranceCompanyId], references: [id])
+  
+  // What field this pattern extracts
+  fieldType           String   // claimNumber, policyNumber, clientName, vehicleReg, excess, etc.
+  
+  // Pattern definition
+  patternType         String   // regex, keyword, position, format
+  patternValue        String   // The actual regex or pattern
+  
+  // Example and description
+  description         String?  // Human-readable description
+  exampleMatch        String?  // Example of what matches
+  
+  // Confidence and usage
+  confidence          Int      @default(70)  // 50-100
+  successCount        Int      @default(0)
+  failureCount        Int      @default(0)
+  
+  // Pattern priority (higher = try first)
+  priority            Int      @default(0)
+  
+  isActive            Boolean  @default(true)
+  isSystemPattern     Boolean  @default(false)  // System-generated vs user-taught
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([insuranceCompanyId, fieldType, patternValue])
+  @@index([insuranceCompanyId, fieldType])
+  @@map("extraction_patterns")
+}
+
+/// Sample extractions for teaching the system (few-shot examples)
+model ExtractionExample {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String?
+  
+  // The field being extracted
+  fieldType           String   // claimNumber, policyNumber, clientName, etc.
+  
+  // The sample data
+  sourceText          String   // Original text snippet
+  extractedValue      String   // What was extracted
+  contextBefore       String?  // Text before the match
+  contextAfter        String?  // Text after the match
+  
+  // How it was learned
+  learnedFrom         String   // user_correction, initial_extraction, manual_entry
+  verified            Boolean  @default(true)
+  
+  // Email reference
+  emailQueueId        String?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([insuranceCompanyId, fieldType])
+  @@map("extraction_examples")
+}
+
+/// Claim number format patterns per insurance company
+model ClaimNumberFormat {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String
+  
+  // Format definition
+  formatPattern       String   // e.g., "STM-YYYY-NNNNN", "OUT/NNNNNN/YY"
+  prefix              String?  // e.g., "STM", "OUT", "CLM"
+  separator           String?  // e.g., "-", "/", ""
+  
+  // Number structure
+  hasYear             Boolean  @default(false)
+  yearPosition        Int?     // Position of year in format
+  numberLength        Int?     // Length of sequential number
+  
+  // Regex pattern
+  regexPattern        String   // Full regex to match
+  
+  // Example
+  example             String?  // Example claim number
+  
+  // Confidence
+  matchCount          Int      @default(0)
+  confidence          Int      @default(70)
+  
+  isActive            Boolean  @default(true)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([insuranceCompanyId, formatPattern])
+  @@map("claim_number_formats")
+}
+
+// =============================================================================
+// ENHANCED LEARNING MODELS (v2.0)
+// =============================================================================
+
+/// Global patterns that work across all companies (learned from common structures)
+model GlobalPattern {
+  id                  String   @id @default(cuid())
+  
+  // What field this pattern extracts
+  fieldType           String   // claimNumber, policyNumber, clientName, etc.
+  
+  // Pattern definition
+  patternValue        String   // Regex pattern
+  description         String?  // Human-readable description
+  
+  // How well this works across companies
+  companyCount        Int      @default(0)  // How many companies use this
+  successRate         Float    @default(0)  // Overall success rate
+  
+  // Confidence
+  confidence          Int      @default(60)  // 50-100
+  isActive            Boolean  @default(true)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([fieldType, patternValue])
+  @@map("global_patterns")
+}
+
+/// Email templates detected from similar emails
+model EmailTemplate {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String?
+  
+  // Template identification
+  templateHash        String   @unique  // Hash of structure/signature
+  
+  // Template content patterns
+  subjectPattern      String?  // Regex for subject
+  signaturePattern    String?  // Email signature pattern
+  structureFingerprint String? // JSON structure fingerprint
+  
+  // What this template contains
+  expectedFields      String?  // JSON array of fields this template usually contains
+  
+  // Usage statistics
+  matchCount          Int      @default(0)
+  claimCount          Int      @default(0)
+  
+  // Confidence
+  confidence          Int      @default(70)
+  isActive            Boolean  @default(true)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([insuranceCompanyId])
+  @@map("email_templates")
+}
+
+/// Field relationships - when one field predicts another
+model FieldRelationship {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String?
+  
+  // Relationship definition
+  primaryField        String   // e.g., "claimType"
+  primaryValue        String?  // e.g., "MOTOR"
+  dependentField      String   // e.g., "vehicleRegistration"
+  
+  // Probability
+  occurrenceCount     Int      @default(0)
+  probability         Float    @default(0)  // P(dependent|primary)
+  
+  // Expected values
+  expectedPattern     String?  // Pattern for dependent field when primary matches
+  
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([insuranceCompanyId, primaryField, primaryValue, dependentField])
+  @@map("field_relationships")
+}
+
+/// Negative patterns - what NOT to extract (false positives learned)
+model NegativePattern {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String?
+  
+  // What was incorrectly extracted
+  fieldType           String
+  incorrectValue      String   // Value that was wrong
+  
+  // Context where it appeared
+  contextPattern      String?  // Where it appeared (to avoid same mistake)
+  
+  // Why it was wrong
+  rejectionReason     String?  // User's reason for rejecting
+  
+  // Statistics
+  occurrenceCount     Int      @default(1)
+  
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  @@index([insuranceCompanyId, fieldType])
+  @@map("negative_patterns")
+}
+
+/// Confidence weights for ensemble extraction
+model ConfidenceWeight {
+  id                  String   @id @default(cuid())
+  insuranceCompanyId  String?
+  
+  // What this weight applies to
+  fieldType           String
+  extractionMethod    String   // "regex", "ai", "template", "position"
+  
+  // Weight (0-1, how much to trust this method)
+  weight              Float    @default(0.5)
+  
+  // Statistics
+  successCount        Int      @default(0)
+  failureCount        Int      @default(0)
+  
+  // Last updated
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([insuranceCompanyId, fieldType, extractionMethod])
+  @@map("confidence_weights")
+}
+
+/// Extraction sessions for multi-field consistency checking
+model ExtractionSession {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // All fields extracted together
+  extractedFields     String   // JSON of all extracted values
+  
+  // Confidence scores
+  overallConfidence   Float    @default(0)
+  fieldConfidences    String?  // JSON of per-field confidence
+  
+  // Was this accepted or corrected?
+  wasAccepted         Boolean  @default(false)
+  correctionCount     Int      @default(0)
+  
+  // Processing time
+  processingTimeMs    Int?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@map("extraction_sessions")
+}
+
+/// Quick learning triggers - patterns that should be learned immediately
+model QuickLearningRule {
+  id                  String   @id @default(cuid())
+  
+  // Trigger condition
+  triggerField        String   // Field that triggers this rule
+  triggerPattern      String   // Pattern in the trigger field
+  
+  // What to learn
+  learnField          String   // Field to learn pattern for
+  learnPattern        String   // Pattern to apply
+  
+  // Priority
+  priority            Int      @default(0)
+  
+  // Statistics
+  triggerCount        Int      @default(0)
+  successCount        Int      @default(0)
+  
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  @@map("quick_learning_rules")
+}
+
+// =============================================================================
+// SYSTEM MODELS
+// =============================================================================
+
+/// Complete audit trail of all system actions
+model AuditLog {
+  id            String   @id @default(cuid())
+  action        String   // claim_created, email_classified, feedback_submitted, etc.
+  entityType    String?  // claim, email, pattern, etc.
+  entityId      String?
+  details       String?  // JSON of action details
+  status        String   @default("SUCCESS") // SUCCESS, WARNING, ERROR
+  
+  // Processing info
+  processedBy   String?  // AUTO or user ID
+  ipAddress     String?
+  userAgent     String?
+  
+  // Relations
+  claimId       String?
+  claim         Claim?   @relation(fields: [claimId], references: [id])
+  
+  createdAt     DateTime @default(now())
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Documents queued for printing
+model PrintQueueItem {
+  id            String   @id @default(cuid())
+  claimId       String?
+  claim         Claim?   @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  
+  fileName      String
+  filePath      String
+  fileType      String?  // pdf, doc, docx, etc.
+  
+  printStatus   String   @default("QUEUED") // QUEUED, PRINTING, COMPLETED, FAILED
+  printedAt     DateTime?
+  printedBy     String?
+  errorMessage  String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([printStatus])
+  @@map("print_queue_items")
+}
+
+/// Key-value system configuration store
+model SystemConfig {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+/// Configurable workflow stages
+model WorkflowStage {
+  id          String   @id @default(cuid())
+  stageKey    String   @unique
+  label       String
+  description String?
+  sortOrder   Int      @default(0)
+  isEnabled   Boolean  @default(true)
+  config      String?  // JSON config for stage behavior
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("workflow_stages")
+}
+
+// =============================================================================
+// DOMAIN INTELLIGENCE LAYER (v3.0)
+// =============================================================================
+
+/// Structured domain intelligence profile with learned patterns
+model DomainProfile {
+  id                  String   @id @default(cuid())
+  domain              String   @unique
+  
+  // Linked company
+  insuranceCompanyId  String?
+  
+  // Known patterns for this domain
+  claimNumberFormats  String?  // JSON array of known claim number formats
+  emailKeywords       String?  // JSON array of keywords that indicate claims
+  attachmentTypes     String?  // JSON array of expected attachment types
+  signaturePatterns   String?  // JSON array of signature patterns
+  
+  // Extraction hints
+  clientNamePatterns  String?  // JSON patterns for client names
+  vehicleRegPatterns  String?  // JSON patterns for vehicle registrations
+  addressPatterns     String?  // JSON patterns for addresses
+  
+  // Confidence and automation
+  confidenceScore     Float    @default(0)  // 0-100
+  automationLevel     String   @default("manual")  // manual, semi, auto
+  
+  // Statistics
+  totalEmails         Int      @default(0)
+  successfulClaims    Int      @default(0)
+  correctedClaims     Int      @default(0)
+  accuracyRate        Float    @default(0)
+  
+  // Last activity
+  lastEmailAt         DateTime?
+  lastClaimAt         DateTime?
+  
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([domain])
+  @@index([insuranceCompanyId])
+  @@map("domain_profiles")
+}
+
+// =============================================================================
+// ATTACHMENT INTELLIGENCE LAYER (v3.0)
+// =============================================================================
+
+/// Parsed attachment data with extracted candidates
+model AttachmentData {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // Attachment info
+  fileName            String
+  fileType            String   // PDF, IMAGE, DOC, OTHER
+  fileSize            Int?
+  
+  // Raw extracted text
+  rawText             String?  // Full extracted text from attachment
+  
+  // Extracted candidates (multiple possible values per field)
+  claimNumbers        String?  // JSON array of candidate claim numbers with confidence
+  clientNames         String?  // JSON array of candidate names
+  policyNumbers       String?  // JSON array of policy numbers
+  vehicleRegs         String?  // JSON array of vehicle registrations
+  addresses           String?  // JSON array of addresses
+  phoneNumbers        String?  // JSON array of phone numbers
+  emailAddresses      String?  // JSON array of emails
+  monetaryAmounts     String?  // JSON array of amounts
+  dates               String?  // JSON array of dates
+  
+  // Overall confidence for this attachment
+  extractionConfidence Float   @default(0)
+  
+  // Processing metadata
+  processingTimeMs    Int?
+  processingError     String?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@map("attachment_data")
+}
+
+/// Evidence tracking for each extracted field
+model ExtractedEvidence {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // What field and value
+  fieldName           String   // claimNumber, clientName, etc.
+  value               String   // The extracted value
+  
+  // Where it came from
+  source              String   // "email_subject", "email_body", "attachment", "signature"
+  sourceDetail        String?  // Specific attachment name or section
+  evidenceText        String?  // The actual text snippet where found
+  
+  // Position info
+  positionStart       Int?
+  positionEnd         Int?
+  
+  // Confidence
+  confidence          Float    @default(0)  // 0-100
+  
+  // Pattern used (if applicable)
+  patternUsed         String?  // Regex or pattern that matched
+  
+  // Was this selected as final value?
+  isSelected          Boolean  @default(false)
+  rejectionReason     String?  // If not selected, why?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@index([fieldName])
+  @@map("extracted_evidence")
+}
+
+/// Cross-source validation conflicts
+model ValidationConflict {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // What field has conflict
+  fieldName           String
+  
+  // The conflicting values
+  values              String   // JSON array of {value, source, confidence}
+  
+  // Conflict details
+  conflictType        String   // "mismatch", "multiple", "missing"
+  severity            String   // "high", "medium", "low"
+  
+  // Resolution
+  resolution          String?  // How it was resolved
+  resolvedValue       String?  // The chosen value
+  resolvedBy          String?  // AUTO or user ID
+  resolvedAt          DateTime?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@index([fieldName])
+  @@map("validation_conflicts")
+}
+
+/// Per-field extraction result with confidence breakdown
+model FieldExtractionResult {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // Field info
+  fieldName           String
+  finalValue          String?
+  
+  // Per-method results
+  regexResult         String?  // JSON {value, confidence}
+  aiResult            String?  // JSON {value, confidence, reasoning}
+  templateResult      String?  // JSON {value, confidence, templateId}
+  attachmentResult    String?  // JSON {value, confidence, attachmentId}
+  
+  // Final confidence
+  finalConfidence     Float    @default(0)
+  
+  // How final value was determined
+  selectedSource      String?  // Which source was chosen
+  selectionReason     String?  // Why this source was chosen
+  
+  // Was it corrected?
+  wasCorrected        Boolean  @default(false)
+  correctedValue      String?
+  correctedBy         String?
+  correctedAt         DateTime?
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([emailQueueId, fieldName])
+  @@index([emailQueueId])
+  @@map("field_extraction_results")
+}
+
+/// Claim number candidates with scoring
+model ClaimNumberCandidate {
+  id                  String   @id @default(cuid())
+  emailQueueId        String
+  
+  // The candidate
+  value               String
+  
+  // Where found
+  source              String   // "email_subject", "email_body", "attachment_filename", "attachment_content"
+  sourceDetail        String?  // Specific location
+  
+  // Scoring
+  patternMatchScore   Int      @default(0)   // 0-100
+  positionScore       Int      @default(0)   // Subject > Body > Attachment
+  repetitionScore     Int      @default(0)   // How many times appeared
+  formatMatchScore    Int      @default(0)   // Matches known company format?
+  
+  // Total confidence
+  totalConfidence     Float    @default(0)
+  
+  // Was selected?
+  isSelected          Boolean  @default(false)
+  rejectionReason     String?
+  
+  createdAt           DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@map("claim_number_candidates")
+}
+
+// =============================================================================
+// ANALYTICS MODELS (Derived/Aggregated)
+// =============================================================================
+
+/// Daily statistics snapshot for reporting
+model DailyStats {
+  id                    String   @id @default(cuid())
+  date                  DateTime @unique
+  
+  // Email stats
+  emailsReceived        Int      @default(0)
+  emailsClassified      Int      @default(0)
+  newClaimsDetected     Int      @default(0)
+  emailsIgnored         Int      @default(0)
+  
+  // Claim stats
+  claimsCreated         Int      @default(0)
+  claimsCompleted       Int      @default(0)
+  claimsPending         Int      @default(0)
+  
+  // AI accuracy
+  correctClassifications Int     @default(0)
+  correctedClassifications Int   @default(0)
+  avgConfidenceScore    Float    @default(0)
+  
+  // Processing stats
+  autoProcessedCount    Int      @default(0)
+  manualReviewCount     Int      @default(0)
+  
+  createdAt             DateTime @default(now())
+
+  @@index([date])
+  @@map("daily_stats")
+}
