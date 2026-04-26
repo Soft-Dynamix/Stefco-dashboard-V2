@@ -160,6 +160,12 @@ export function InboxSection() {
     }>;
   } | null>(null);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    filename: string;
+    content: string;
+    contentType: string;
+  } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { toast } = useToast();
 
   // Decode quoted-printable encoding (for emails stored before the fix)
@@ -675,6 +681,68 @@ export function InboxSection() {
       toast({
         title: "Error",
         description: "Failed to update email",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Preview attachment
+  const previewAttachmentFile = async (emailId: string, filename: string) => {
+    try {
+      const res = await fetch(`/api/attachments?action=preview&emailId=${emailId}&filename=${encodeURIComponent(filename)}`);
+      
+      if (!res.ok) {
+        throw new Error("Failed to load attachment");
+      }
+      
+      const contentType = res.headers.get("Content-Type") || "application/octet-stream";
+      
+      // For images and PDFs, get the blob URL for preview
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      
+      setPreviewAttachment({
+        filename,
+        content: url,
+        contentType,
+      });
+      setPreviewOpen(true);
+    } catch (error) {
+      toast({
+        title: "Preview Failed",
+        description: error instanceof Error ? error.message : "Could not preview attachment",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Download attachment
+  const downloadAttachment = async (emailId: string, filename: string) => {
+    try {
+      const res = await fetch(`/api/attachments?action=download&emailId=${emailId}&filename=${encodeURIComponent(filename)}`);
+      
+      if (!res.ok) {
+        throw new Error("Failed to download attachment");
+      }
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Download Started",
+        description: `Downloading ${filename}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: error instanceof Error ? error.message : "Could not download attachment",
         variant: "destructive",
       });
     }
@@ -1591,6 +1659,28 @@ export function InboxSection() {
                                               {att.size && ` • ${(att.size / 1024).toFixed(1)} KB`}
                                             </p>
                                           </div>
+                                          <div className="flex items-center gap-2">
+                                            {(isImage || isPdf) && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => previewAttachmentFile(selectedEmail.id, att.filename)}
+                                                title="Preview"
+                                              >
+                                                <Eye className="h-4 w-4" />
+                                              </Button>
+                                            )}
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0"
+                                              onClick={() => downloadAttachment(selectedEmail.id, att.filename)}
+                                              title="Download"
+                                            >
+                                              <Download className="h-4 w-4" />
+                                            </Button>
+                                          </div>
                                         </div>
                                       );
                                     })}
@@ -1802,6 +1892,55 @@ export function InboxSection() {
         email={emailToReject}
         onSubmit={handleRejectionFeedback}
       />
+
+      {/* Attachment Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+          <DialogHeader className="p-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {previewAttachment?.filename}
+            </DialogTitle>
+            <DialogDescription>
+              {previewAttachment?.contentType}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto p-4 min-h-[400px] max-h-[calc(90vh-120px)]">
+            {previewAttachment && (
+              previewAttachment.contentType.startsWith('image/') ? (
+                <img
+                  src={previewAttachment.content}
+                  alt={previewAttachment.filename}
+                  className="max-w-full max-h-full mx-auto object-contain"
+                />
+              ) : previewAttachment.contentType === 'application/pdf' ? (
+                <iframe
+                  src={previewAttachment.content}
+                  className="w-full h-[70vh] border-0"
+                  title="PDF Preview"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <FileText className="h-16 w-16 mb-4 opacity-50" />
+                  <p>Preview not available for this file type</p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => {
+                      if (previewAttachment) {
+                        downloadAttachment(selectedEmail?.id || '', previewAttachment.filename);
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download File
+                  </Button>
+                </div>
+              )
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
