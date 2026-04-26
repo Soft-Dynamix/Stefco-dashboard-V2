@@ -1352,3 +1352,47 @@ Files Modified:
 Root Cause:
 The VLM API requires a properly formatted data URL (data:image/jpeg;base64,<content>) but the attachment content was being passed as raw base64 without the data URL prefix. Additionally, PDF files needed special handling as the VLM may not always support them directly.
 
+
+---
+Task ID: 49
+Agent: Main Agent
+Task: Fix Attachment Analysis Not Showing Results in UI
+
+Work Log:
+- User reported attachment analysis ran but results weren't displayed in UI
+- Identified that analysis results were being saved to database but not shown to user
+- Added state management for attachment analysis results
+- Created fetchAttachmentAnalysis function to load existing analysis from database
+- Updated viewEmail to automatically fetch analysis when viewing emails with attachments
+- Added comprehensive Analysis Results display section showing:
+  - Overall claim likelihood percentage with badge
+  - Confidence level (HIGH/MEDIUM/LOW)
+  - Assessment reason explaining the analysis
+  - Key indicators found (green badges)
+  - Missing information (amber badges)
+  - Individual document classification for each attachment
+  - Claim#, Policy#, Vehicle detection badges per document
+- Updated Analyze Attachments button to refresh results after analysis completes
+- Added loading state indicator while fetching analysis
+
+Stage Summary:
+- Attachment analysis results now displayed prominently in Attachments tab
+- Users can see key indicators, claim likelihood, and document classifications
+- Analysis loads automatically when viewing emails with attachments
+- Results refresh after running new analysis
+
+Files Modified:
+- src/components/sections/inbox-section.tsx - Added analysis state, fetch function, and results display
+
+UI Features Added:
+- Analysis Results card showing:
+  - Claim likelihood percentage badge
+  - Confidence level badge  
+  - Assessment reason text
+  - Key indicators section (green badges)
+  - Missing information section (amber badges)
+  - Document classification list per attachment
+  - Detection badges (Claim#, Policy#, Vehicle)
+- Loading spinner while fetching analysis
+- Button state shows "Loading..." during analysis
+

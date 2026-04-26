@@ -130,6 +130,36 @@ export function InboxSection() {
     totalAttachments: number;
     activeEmailsNeedingRefetch: number;
   } | null>(null);
+  const [attachmentAnalysis, setAttachmentAnalysis] = useState<{
+    summary: {
+      totalAttachments: number;
+      claimRelatedAttachments: number;
+      hasClaimForm: boolean;
+      hasPolicySchedule: boolean;
+      hasSupportingDocuments: boolean;
+      overallClaimLikelihood: number;
+      isLikelyNewClaim: boolean;
+      confidenceLevel: string;
+      assessmentReason: string;
+      keyIndicators: string[];
+      missingInformation: string[];
+    } | null;
+    analyses: Array<{
+      id: string;
+      fileName: string;
+      fileType: string;
+      documentType: string;
+      documentConfidence: number;
+      isClaimRelated: boolean;
+      importance: string;
+      claimLikelihoodScore: number;
+      containsClaimNumber: boolean;
+      containsPolicyNumber: boolean;
+      containsVehicleReg: boolean;
+      processingError?: string;
+    }>;
+  } | null>(null);
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
   const { toast } = useToast();
 
   // Decode quoted-printable encoding (for emails stored before the fix)
@@ -395,9 +425,48 @@ export function InboxSection() {
     fetchAttachmentStats();
   }, []);
 
+  // Fetch attachment analysis for an email
+  const fetchAttachmentAnalysis = async (emailId: string) => {
+    setIsLoadingAnalysis(true);
+    try {
+      const res = await fetch(`/api/attachment-analysis?action=summary&emailId=${emailId}`);
+      const json = await res.json();
+      if (json.summary || json.analyses) {
+        setAttachmentAnalysis({
+          summary: json.summary ? {
+            totalAttachments: json.summary.totalAttachments,
+            claimRelatedAttachments: json.summary.claimRelatedAttachments,
+            hasClaimForm: json.summary.hasClaimForm,
+            hasPolicySchedule: json.summary.hasPolicySchedule,
+            hasSupportingDocuments: json.summary.hasSupportingDocuments,
+            overallClaimLikelihood: json.summary.overallClaimLikelihood,
+            isLikelyNewClaim: json.summary.isLikelyNewClaim,
+            confidenceLevel: json.summary.confidenceLevel,
+            assessmentReason: json.summary.assessmentReason,
+            keyIndicators: json.summary.keyIndicators ? JSON.parse(json.summary.keyIndicators) : [],
+            missingInformation: json.summary.missingInformation ? JSON.parse(json.summary.missingInformation) : [],
+          } : null,
+          analyses: json.analyses || []
+        });
+      } else {
+        setAttachmentAnalysis(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch attachment analysis:", error);
+      setAttachmentAnalysis(null);
+    } finally {
+      setIsLoadingAnalysis(false);
+    }
+  };
+
   const viewEmail = (email: Email) => {
     setSelectedEmail(email);
     setDetailsOpen(true);
+    setAttachmentAnalysis(null); // Clear previous analysis
+    // Fetch analysis if email has attachments
+    if (email.attachments && email.attachments !== "NO_ATTACHMENTS") {
+      fetchAttachmentAnalysis(email.id);
+    }
   };
 
   const openRejectModal = (email: Email) => {
@@ -1360,6 +1429,8 @@ export function InboxSection() {
                                               title: "Analysis Complete",
                                               description: `Found ${result.summary?.keyIndicators?.length || 0} key indicators. Claim likelihood: ${result.summary?.overallClaimLikelihood || 0}%`,
                                             });
+                                            // Refresh the analysis display
+                                            fetchAttachmentAnalysis(selectedEmail.id);
                                           } else {
                                             throw new Error(result.error);
                                           }
@@ -1373,9 +1444,99 @@ export function InboxSection() {
                                       }}
                                     >
                                       <FileSearch className="h-4 w-4" />
-                                      Analyze Attachments
+                                      {isLoadingAnalysis ? "Loading..." : "Analyze Attachments"}
                                     </Button>
                                   </div>
+                                  
+                                  {/* Analysis Results Display */}
+                                  {attachmentAnalysis && attachmentAnalysis.summary && (
+                                    <div className="space-y-3 mb-4 p-4 border rounded-lg bg-muted/30">
+                                      <div className="flex items-center justify-between">
+                                        <h4 className="font-medium text-sm">Analysis Results</h4>
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant={attachmentAnalysis.summary.overallClaimLikelihood >= 60 ? "default" : "secondary"} 
+                                            className={attachmentAnalysis.summary.overallClaimLikelihood >= 60 ? "bg-green-500" : ""}>
+                                            {attachmentAnalysis.summary.overallClaimLikelihood}% Claim Likelihood
+                                          </Badge>
+                                          <Badge variant="outline">
+                                            {attachmentAnalysis.summary.confidenceLevel} Confidence
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      
+                                      <p className="text-sm text-muted-foreground">
+                                        {attachmentAnalysis.summary.assessmentReason}
+                                      </p>
+                                      
+                                      {attachmentAnalysis.summary.keyIndicators && attachmentAnalysis.summary.keyIndicators.length > 0 && (
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-green-600">Key Indicators Found:</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {attachmentAnalysis.summary.keyIndicators.map((indicator, idx) => (
+                                              <Badge key={idx} variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+                                                {indicator}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {attachmentAnalysis.summary.missingInformation && attachmentAnalysis.summary.missingInformation.length > 0 && (
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-amber-600">Missing Information:</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {attachmentAnalysis.summary.missingInformation.map((item, idx) => (
+                                              <Badge key={idx} variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-700">
+                                                {item}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Individual Document Analysis */}
+                                      {attachmentAnalysis.analyses && attachmentAnalysis.analyses.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t">
+                                          <p className="text-xs font-medium mb-2">Document Classification:</p>
+                                          <div className="grid gap-2">
+                                            {attachmentAnalysis.analyses.map((analysis, idx) => (
+                                              <div key={idx} className="flex items-center justify-between p-2 bg-background rounded border text-xs">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-medium truncate max-w-[200px]" title={analysis.fileName}>
+                                                    {analysis.fileName}
+                                                  </span>
+                                                  <Badge variant={analysis.isClaimRelated ? "default" : "secondary"} 
+                                                    className={analysis.isClaimRelated ? "bg-green-500 text-[10px]" : "text-[10px]"}>
+                                                    {analysis.documentType}
+                                                  </Badge>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  {analysis.containsClaimNumber && (
+                                                    <Badge variant="outline" className="text-[10px]">Claim#</Badge>
+                                                  )}
+                                                  {analysis.containsPolicyNumber && (
+                                                    <Badge variant="outline" className="text-[10px]">Policy#</Badge>
+                                                  )}
+                                                  {analysis.containsVehicleReg && (
+                                                    <Badge variant="outline" className="text-[10px]">Vehicle</Badge>
+                                                  )}
+                                                  <span className="text-muted-foreground">{analysis.documentConfidence}%</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Loading State */}
+                                  {isLoadingAnalysis && !attachmentAnalysis && (
+                                    <div className="flex items-center justify-center p-4 text-muted-foreground">
+                                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                                      Loading analysis...
+                                    </div>
+                                  )}
                                   
                                   {/* Attachments List */}
                                   <div className="grid gap-2">
