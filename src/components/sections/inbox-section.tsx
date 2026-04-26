@@ -1673,9 +1673,14 @@ export function InboxSection() {
                                             throw new Error(result.error);
                                           }
                                         } catch (error) {
+                                          // Check for rate limiting
+                                          const errorMsg = String(error);
+                                          const isRateLimited = errorMsg.includes('429') || errorMsg.includes('Too many requests') || errorMsg.includes('rate limit');
                                           toast({
-                                            title: "Analysis Failed",
-                                            description: String(error),
+                                            title: isRateLimited ? "Rate Limited" : "Analysis Failed",
+                                            description: isRateLimited
+                                              ? "API rate limit reached. Please wait a moment and try again."
+                                              : errorMsg,
                                             variant: "destructive",
                                           });
                                         } finally {

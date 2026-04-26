@@ -31,6 +31,47 @@ async function getZAI(): Promise<ZAI> {
   return zaiInstance;
 }
 
+/**
+ * Retry helper with exponential backoff for rate-limited API calls
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+    context?: string;
+  } = {}
+): Promise<T> {
+  const { maxRetries = 3, initialDelayMs = 1000, maxDelayMs = 10000, context = 'API' } = options;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const errorMsg = lastError.message;
+
+      // Check if it's a rate limit error (429)
+      const isRateLimited = errorMsg.includes('429') || errorMsg.includes('Too many requests') || errorMsg.includes('rate limit');
+
+      if (!isRateLimited || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Calculate delay with exponential backoff
+      const delay = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+      console.log(`[${context}] Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -337,19 +378,22 @@ Respond in JSON format:
 }`;
 
   try {
-    const response = await zai.chat.completions.createVision({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageUrl } }
-          ]
-        }
-      ],
-      thinking: { type: "disabled" }
-    });
+    const response = await withRetry(
+      () => zai.chat.completions.createVision({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        thinking: { type: "disabled" }
+      }),
+      { context: 'classifyDocument', maxRetries: 2 }
+    );
 
     const content = response.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -516,19 +560,22 @@ Respond in JSON format with null for fields not found:
 }`;
 
   try {
-    const response = await zai.chat.completions.createVision({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageUrl } }
-          ]
-        }
-      ],
-      thinking: { type: "disabled" }
-    });
+    const response = await withRetry(
+      () => zai.chat.completions.createVision({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        thinking: { type: "disabled" }
+      }),
+      { context: 'extractClaimFormData', maxRetries: 2 }
+    );
 
     const content = response.choices?.[0]?.message?.content || "";
     return parseClaimFormResponse(content);
@@ -691,19 +738,22 @@ Respond in JSON format with null for fields not found:
 }`;
 
   try {
-    const response = await zai.chat.completions.createVision({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageUrl } }
-          ]
-        }
-      ],
-      thinking: { type: "disabled" }
-    });
+    const response = await withRetry(
+      () => zai.chat.completions.createVision({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        thinking: { type: "disabled" }
+      }),
+      { context: 'extractPolicyScheduleData', maxRetries: 2 }
+    );
 
     const content = response.choices?.[0]?.message?.content || "";
     return parsePolicyScheduleResponse(content);
@@ -1295,16 +1345,19 @@ Respond in JSON format:
 }`;
 
   try {
-    // Use regular LLM for PDF analysis
-    const response = await zai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: classificationPrompt
-        }
-      ],
-    });
+    // Use regular LLM for PDF analysis with retry logic
+    const response = await withRetry(
+      () => zai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: classificationPrompt
+          }
+        ],
+      }),
+      { context: 'analyzePdfWithLlm', maxRetries: 3, initialDelayMs: 2000 }
+    );
 
     const content = response.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -2247,10 +2300,13 @@ Respond in JSON format:
 }`;
 
   try {
-    const response = await zai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: unifiedPrompt }]
-    });
+    const response = await withRetry(
+      () => zai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: unifiedPrompt }]
+      }),
+      { context: 'unified-analysis', maxRetries: 3, initialDelayMs: 2000 }
+    );
     
     const content = response.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
