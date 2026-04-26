@@ -19,10 +19,11 @@ Currently, the API uses session-based authentication. All endpoints require the 
 2. [Email Inbox API](#email-inbox-api)
 3. [Email Polling API](#email-polling-api)
 4. [Learning API](#learning-api)
-5. [Insurance Companies API](#insurance-companies-api)
-6. [Feedback API](#feedback-api)
-7. [Analytics API](#analytics-api)
-8. [Audit Log API](#audit-log-api)
+5. [Learning History API (v2.5.0)](#learning-history-api-v250)
+6. [Insurance Companies API](#insurance-companies-api)
+7. [Feedback API](#feedback-api)
+8. [Analytics API](#analytics-api)
+9. [Audit Log API](#audit-log-api)
 
 ---
 
@@ -352,6 +353,125 @@ Content-Type: application/json
 
 ---
 
+## Learning History API (v2.5.0)
+
+### Get Learning History
+
+Retrieve AI prediction history, field accuracy metrics, and learning progress.
+
+```http
+GET /api/learning?type=history&page=1&limit=20
+```
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| type | string | stats | Must be "history" for this endpoint |
+| page | number | 1 | Page number for comparisons |
+| limit | number | 50 | Comparisons per page |
+
+**Response:**
+```json
+{
+  "comparisons": [
+    {
+      "id": "comp-id",
+      "emailQueueId": "email-id",
+      "claimId": "claim-id",
+      "senderDomain": "santam.co.za",
+      "claimType": "MOTOR",
+      "comparisons": "[{\"field\":\"claimNumber\",\"predicted\":\"STM-2025-000\",\"actual\":\"STM-2025-00001\",\"confidence\":85,\"isCorrect\":false}]",
+      "totalFields": 10,
+      "correctFields": 8,
+      "accuracyRate": 80,
+      "learningApplied": true,
+      "createdAt": "2025-04-27T10:00:00Z"
+    }
+  ],
+  "totalComparisons": 150,
+  "currentPage": 1,
+  "totalPages": 8,
+  "fieldMetrics": [
+    {
+      "id": "metric-id",
+      "senderDomain": "santam.co.za",
+      "fieldName": "claimNumber",
+      "claimType": "MOTOR",
+      "totalPredictions": 25,
+      "correctPredictions": 23,
+      "correctedCount": 2,
+      "accuracyRate": 92,
+      "recentAccuracy": 95,
+      "trendDirection": "improving",
+      "avgConfidence": 88,
+      "readyForAutoClaim": true,
+      "lastPredictionAt": "2025-04-27T10:00:00Z"
+    }
+  ],
+  "overallAccuracy": 85.5,
+  "accuracyTrend": [
+    {"date": "2025-04-21", "accuracy": 75, "total": 20},
+    {"date": "2025-04-22", "accuracy": 78, "total": 25},
+    {"date": "2025-04-23", "accuracy": 82, "total": 30},
+    {"date": "2025-04-24", "accuracy": 80, "total": 28},
+    {"date": "2025-04-25", "accuracy": 85, "total": 35},
+    {"date": "2025-04-26", "accuracy": 88, "total": 40},
+    {"date": "2025-04-27", "accuracy": 90, "total": 45}
+  ],
+  "fieldsReadyForAuto": 12,
+  "totalFields": 25,
+  "domainsSummary": [
+    {
+      "senderDomain": "santam.co.za",
+      "automationLevel": "semi_auto",
+      "totalEmails": 150,
+      "accuracyRate": 92
+    }
+  ],
+  "summary": {
+    "totalPredictions": 500,
+    "totalCorrect": 425,
+    "overallAccuracy": 85,
+    "comparisonsCount": 150,
+    "fieldsLearned": 25,
+    "fieldsReadyForAuto": 12,
+    "improvingFields": 15,
+    "decliningFields": 2,
+    "stableFields": 8
+  }
+}
+```
+
+### Field Comparison Object
+
+Each comparison record contains a JSON array of field-level comparisons:
+
+```json
+{
+  "field": "claimNumber",
+  "predicted": "STM-2025-000",
+  "actual": "STM-2025-00001",
+  "confidence": 85,
+  "isCorrect": false,
+  "errorType": "wrong"
+}
+```
+
+**Error Types:**
+- `wrong` - AI extracted wrong value
+- `missing` - AI didn't extract a value that exists
+- `extra` - AI extracted a value that doesn't exist
+
+### Auto-Claim Readiness
+
+Fields become "ready for auto-claim" when:
+- At least 10 predictions for that field
+- Accuracy rate of 90% or higher
+
+The system tracks readiness per domain, per field, and per claim type for granular control.
+
+---
+
 ## Learning API
 
 ### Get Learning Statistics
@@ -622,7 +742,7 @@ Future versions will support webhooks for:
 
 ---
 
-*Last updated: 2025-04-26 (v2.3.0)*
+*Last updated: 2025-04-27 (v2.5.0)*
 
 ---
 

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2025-04-27
+
+### Added
+- **Learning History Feature** - Track what the AI has learned over time
+  - Learning History tab in Learning Engine section
+  - Summary cards: Overall Accuracy, Correct Predictions, Fields Learned, Improving/Declining counts
+  - Prediction Comparison table showing AI predictions vs human corrections
+  - Field Accuracy Metrics with trend indicators (Improving/Declining/Stable)
+  - Auto-claim readiness tracking (90%+ accuracy threshold)
+  - Expandable field-level details showing predicted vs actual values
+  - Pagination for history records
+
+- **Learning History API** - New endpoint for learning data
+  - GET /api/learning?type=history - Retrieve learning history
+  - Prediction comparisons with pagination
+  - Field accuracy metrics grouped by domain
+  - Accuracy trend over last 7 days
+  - Summary statistics
+
+- **Prediction Learning System** - Backend learning infrastructure
+  - Store AI predictions when analyzing emails
+  - Compare predictions vs actual when claims created
+  - Track field-level accuracy per domain
+  - Auto-claim readiness detection
+  - Learning pattern creation from corrections
+
+### Changed
+- Enhanced learning-section.tsx with comprehensive learning history UI
+- Regenerated Prisma client to include PredictionComparison and FieldAccuracyMetric models
+
+### Technical
+- PredictionComparison model stores AI vs human comparisons
+- FieldAccuracyMetric tracks per-field accuracy with trends
+- Learning applied flag for tracking which comparisons improved the model
+
 ## [2.4.0] - 2025-04-27
 
 ### Added
@@ -237,6 +272,7 @@ The system now analyzes attachment content, not just filenames, to determine if 
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 2.5.0 | 2025-04-27 | Learning History, prediction tracking, field accuracy metrics, auto-claim readiness |
 | 2.4.0 | 2025-04-27 | Attachment refetch system, extraction module, badge count fixes |
 | 2.3.0 | 2025-04-27 | AI attachment analysis, document classification, claim likelihood scoring |
 | 2.2.0 | 2025-04-26 | Bulk operations, HTML email rendering, AI auto-fill, encoding fixes |
@@ -246,13 +282,13 @@ The system now analyzes attachment content, not just filenames, to determine if 
 
 ## Upcoming Features (Roadmap)
 
-### v2.5.0 (Planned)
+### v2.6.0 (Planned)
 - [ ] Advanced search with date range filters
 - [ ] Email export to CSV/Excel
 - [ ] Dashboard widget customization
 - [ ] Real-time notifications with WebSocket
 
-### v2.6.0 (Planned)
+### v2.7.0 (Planned)
 - [ ] Email threading visualization
 - [ ] Advanced analytics charts
 - [ ] API rate limiting

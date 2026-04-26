@@ -15,6 +15,14 @@ STEFCO Claims Dashboard is a comprehensive claims management platform that autom
 - **Learning Engine** - Pattern learning from user corrections
 - **Attachment Processing** - VLM-based extraction from images/PDFs
 
+### Learning History (v2.5.0)
+- **Prediction Tracking** - Store AI predictions when analyzing emails
+- **Comparison System** - Compare AI predictions vs human corrections
+- **Field Accuracy Metrics** - Per-field accuracy tracking with trends
+- **Auto-Claim Readiness** - Track progress toward 90% accuracy threshold
+- **Learning Insights** - Summary cards showing improving/declining fields
+- **Historical View** - See what AI has learned over time
+
 ### Attachment Intelligence (v2.4.0)
 - **Attachment Refetch System** - Retrieve attachments for historical emails
 - **MIME Parsing** - Extract attachments from raw email source
@@ -168,9 +176,23 @@ GET    /api/attachment-analysis # Get analysis results
 ### Learning
 ```
 GET    /api/learning        # Learning statistics
+GET    /api/learning?type=history # Learning history with predictions
+GET    /api/learning?type=patterns # All learning patterns
+GET    /api/learning?type=senders  # All sender profiles
+GET    /api/learning?type=autoignore # Auto-ignore rules
 POST   /api/claim-feedback  # Submit corrections (triggers learning)
 GET    /api/extraction-patterns # List patterns
 POST   /api/extraction-patterns # Create pattern
+```
+
+### Learning History (v2.5.0)
+```
+GET    /api/learning?type=history&page=1&limit=20
+# Returns:
+# - comparisons: Prediction vs actual records
+# - fieldMetrics: Per-field accuracy by domain
+# - accuracyTrend: Daily accuracy over last 7 days
+# - summary: Overall statistics and counts
 ```
 
 ### Feedback & Thread Detection
@@ -336,6 +358,14 @@ CMD ["bun", "run", "start"]
 ```
 
 ## Recent Changes
+
+### v2.5.0 (2025-04-27)
+- **Learning History**: New tab showing AI learning progress over time
+- **Prediction Tracking**: Store AI predictions for later comparison
+- **Field Accuracy Metrics**: Per-field accuracy with trend indicators
+- **Auto-Claim Readiness**: Track progress toward 90% accuracy threshold
+- **Learning Insights**: Summary cards showing improving/declining fields
+- **Historical Comparisons**: View predicted vs actual values per field
 
 ### v2.4.0 (2025-04-27)
 - **Attachment Refetch System**: Retrieve attachments for historical emails
