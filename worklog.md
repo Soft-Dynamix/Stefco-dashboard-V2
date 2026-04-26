@@ -972,3 +972,44 @@ p-5 (more padding)
 ```
 
 ---
+
+---
+Task ID: 45
+Agent: Main Agent
+Task: Fix Quoted-Printable Email Body Encoding Issue
+
+Work Log:
+- User reported email body showing raw encoding artifacts (`=20`, `=A0`, `&amp;`, unformatted HTML tags)
+- Analyzed uploaded screenshot showing invoice email with corrupted display
+- Identified root cause: quoted-printable encoding not being decoded for HTML body content
+- Found in email-poller.ts that bodyText had partial decoding but bodyHtml had NO decoding
+- Added proper `decodeQuotedPrintable` function in backend email-poller
+- Added client-side decoding fallback in inbox-section component for already-stored emails
+- Updated iframe and text display to use decoded content
+
+Stage Summary:
+- Email HTML body now properly decoded from quoted-printable format
+- Both backend (for new emails) and frontend (for existing emails) handle decoding
+- Invoice emails now display correctly with proper formatting, tables, and images
+
+Files Modified:
+- src/lib/email-poller.ts - Added decodeQuotedPrintable function for both bodyText and bodyHtml
+- src/components/sections/inbox-section.tsx - Added client-side decoding with useMemo for fallback
+
+Technical Details:
+The quoted-printable encoding is a common email transfer encoding where:
+- `=20` represents a space character
+- `=A0` represents a non-breaking space
+- `=3D` represents an equals sign
+- Soft line breaks are indicated by `=\r\n`
+
+The backend fix ensures newly polled emails are decoded before storage:
+```typescript
+const decodeQuotedPrintable = (str: string): string => {
+  return str
+    .replace(/=\r\n/g, "") // Remove soft line breaks
+    .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+};
+```
+
+The frontend fix serves as a fallback for emails already in the database with encoding artifacts.

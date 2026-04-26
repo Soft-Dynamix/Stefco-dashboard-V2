@@ -323,9 +323,16 @@ export async function fetchEmails(limit: number = 50): Promise<{
         // Simple extraction - in production you'd want proper MIME parsing
         const textMatch = source.match(/Content-Type: text\/plain[\s\S]*?\r\n\r\n([\s\S]*?)(?=\r\n--|\r\nContent-|$)/i);
         const htmlMatch = source.match(/Content-Type: text\/html[\s\S]*?\r\n\r\n([\s\S]*?)(?=\r\n--|\r\nContent-|$)/i);
-        
-        if (textMatch) bodyText = textMatch[1].replace(/=\r\n/g, "").replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-        if (htmlMatch) bodyHtml = htmlMatch[1];
+
+        // Decode quoted-printable encoding
+        const decodeQuotedPrintable = (str: string): string => {
+          return str
+            .replace(/=\r\n/g, "") // Remove soft line breaks
+            .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))); // Decode hex chars
+        };
+
+        if (textMatch) bodyText = decodeQuotedPrintable(textMatch[1]);
+        if (htmlMatch) bodyHtml = decodeQuotedPrintable(htmlMatch[1]);
 
         const from = envelope.from?.[0]?.address || envelope.from?.[0]?.name || null;
         const fromEmail = parseEmailAddress(envelope.from?.[0]?.address || envelope.sender?.[0]?.address || null);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -118,6 +118,22 @@ export function InboxSection() {
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [showHtmlView, setShowHtmlView] = useState(true);
   const { toast } = useToast();
+
+  // Decode quoted-printable encoding (for emails stored before the fix)
+  const decodeQuotedPrintable = (str: string | null): string | null => {
+    if (!str) return null;
+    // Check if the string appears to be quoted-printable encoded
+    if (!str.includes("=20") && !str.includes("=A0") && !/=([0-9A-F]{2})/.test(str)) {
+      return str; // Not encoded, return as-is
+    }
+    return str
+      .replace(/=\r\n/g, "") // Remove soft line breaks
+      .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))); // Decode hex chars
+  };
+
+  // Memoize decoded email content
+  const decodedBodyHtml = useMemo(() => decodeQuotedPrintable(selectedEmail?.bodyHtml || null), [selectedEmail?.bodyHtml]);
+  const decodedBodyText = useMemo(() => decodeQuotedPrintable(selectedEmail?.bodyText || null), [selectedEmail?.bodyText]);
 
   useEffect(() => {
     fetchEmails(1);
@@ -1045,7 +1061,7 @@ export function InboxSection() {
                             <FileText className="h-4 w-4" />
                             Email Body
                           </CardTitle>
-                          {selectedEmail.bodyHtml && (
+                          {decodedBodyHtml && (
                             <div className="flex items-center gap-2">
                               <Button
                                 variant={showHtmlView ? "default" : "outline"}
@@ -1070,9 +1086,9 @@ export function InboxSection() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-0">
-                        {showHtmlView && selectedEmail.bodyHtml ? (
+                        {showHtmlView && decodedBodyHtml ? (
                           <iframe
-                            srcDoc={selectedEmail.bodyHtml}
+                            srcDoc={decodedBodyHtml}
                             className="w-full h-[calc(92vh-260px)] min-h-[400px] border-0"
                             sandbox="allow-same-origin allow-images"
                             title="Email HTML Content"
@@ -1081,7 +1097,7 @@ export function InboxSection() {
                           <ScrollArea className="h-[calc(92vh-240px)] min-h-[400px]">
                             <div className="p-5">
                               <pre className="text-base whitespace-pre-wrap font-sans leading-7 tracking-wide">
-                                {selectedEmail.bodyText || (
+                                {decodedBodyText || (
                                   <span className="text-muted-foreground italic">No content available</span>
                                 )}
                               </pre>
