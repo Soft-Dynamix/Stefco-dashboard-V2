@@ -17,6 +17,7 @@
 
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "./db";
+import { PDFParse } from "pdf-parse";
 
 // Cache ZAI instance
 let zaiInstance: ZAI | null = null;
@@ -1073,8 +1074,8 @@ function getMimeTypeFromFilename(fileName: string): string {
 }
 
 /**
- * Analyze PDF using LLM (text-based approach)
- * Note: VLM only supports images, not PDFs, so we use regular LLM for PDFs
+ * Analyze PDF using LLM with extracted text content
+ * Extracts text from PDF and uses LLM for intelligent analysis
  */
 async function analyzePdfWithLlm(
   dataUrl: string,
@@ -1092,55 +1093,85 @@ async function analyzePdfWithLlm(
   const base64Match = dataUrl.match(/base64,(.+)/);
   const base64Content = base64Match ? base64Match[1] : "";
   
-  // VLM doesn't support PDFs directly, so we use a filename-based approach
-  // and potentially extract text content for analysis
   console.log(`[analyzePdfWithLlm] Processing PDF: ${fileName} (${base64Content.length} chars base64)`);
   
-  // Use LLM to analyze based on filename patterns and available metadata
-  const classificationPrompt = `You are an expert insurance document classifier for South African insurance companies.
+  // Extract text from PDF
+  let pdfText = "";
+  try {
+    if (base64Content) {
+      const pdfBuffer = Buffer.from(base64Content, 'base64');
+      const parser = new PDFParse();
+      const pdfData = await parser.parse(pdfBuffer);
+      pdfText = pdfData.text || "";
+      console.log(`[analyzePdfWithLlm] Extracted ${pdfText.length} chars of text from PDF`);
+    }
+  } catch (pdfError) {
+    console.error(`[analyzePdfWithLlm] Failed to extract PDF text:`, pdfError);
+  }
+  
+  // Truncate text if too long (LLM has token limits)
+  const maxTextLength = 8000;
+  const truncatedText = pdfText.length > maxTextLength 
+    ? pdfText.substring(0, maxTextLength) + "\n...[truncated]" 
+    : pdfText;
+  
+  // Use LLM to analyze the PDF content
+  const classificationPrompt = `You are an expert insurance document analyzer for South African insurance companies.
 
-Analyze this PDF document based on its filename and classify it into one of these categories:
-- CLAIM_FORM: Claim submission forms, incident reports, accident notifications
-- POLICY_SCHEDULE: Insurance policy documents, certificates of insurance, schedule of coverage
-- INVOICE: Bills, statements, payment requests
-- QUOTATION: Quotes, estimates, proposals
-- POLICE_REPORT: Police case reports, accident case numbers
-- MEDICAL_REPORT: Medical reports, hospital documentation
-- VEHICLE_ASSESSMENT: Vehicle damage assessments, inspection reports
-- REPAIR_QUOTE: Repair estimates, body shop quotes
-- CORRESPONDENCE: General letters, emails
-- IDENTITY_DOCUMENT: ID cards, passports, driver's licenses
-- PROOF_OF_ADDRESS: Utility bills, bank statements for address proof
-- BANKING_DETAILS: Bank account details, payment information
-- PHOTO_EVIDENCE: Photos of damage, accidents, vehicles
-- EMAIL_PRINTOUT: Printed emails
-- OTHER: Documents that don't fit other categories
+Analyze this PDF document and extract ALL relevant information.
 
 Document filename: ${fileName}
-${companyContext ? `This document is from ${companyContext}.` : ''}
+${companyContext ? `Source: ${companyContext}` : ''}
 
-Look for patterns in the filename:
-- "Claim" or "claimform" → CLAIM_FORM
-- "Policy" + "Schedule" → POLICY_SCHEDULE
-- "Invoice" or "Statement" → INVOICE
-- "Quote" or "Quotation" → QUOTATION
-- "Police" or "CAS" → POLICE_REPORT
-- Policy numbers like "PSGTC0002483778" often indicate policy schedules
-- Claim numbers like "STM-2024-12345" indicate claim documents
+${pdfText ? `--- PDF TEXT CONTENT ---
+${truncatedText}
+--- END PDF TEXT ---` : '(No text could be extracted from this PDF - analyze based on filename only)'}
+
+Your tasks:
+1. Classify the document type
+2. Extract ALL key information you find
+3. Look for South African formats:
+   - Vehicle registrations: XX XX GP, XX-XX-GP format
+   - Phone numbers: +27 or 0 prefix (082 123 4567)
+   - ID numbers: 13-digit SA ID format
+   - Claim numbers: Various formats (STM-YYYY-NNNNN, OUT/NNNNNN/YY, etc.)
+   - Policy numbers: Company-specific formats
 
 Respond in JSON format:
 {
-  "documentType": "one of the categories above",
+  "documentType": "CLAIM_FORM|POLICY_SCHEDULE|INVOICE|QUOTATION|POLICE_REPORT|MEDICAL_REPORT|VEHICLE_ASSESSMENT|REPAIR_QUOTE|CORRESPONDENCE|IDENTITY_DOCUMENT|PROOF_OF_ADDRESS|BANKING_DETAILS|PHOTO_EVIDENCE|OTHER",
   "confidence": 0-100,
-  "reasoning": "brief explanation of classification",
+  "reasoning": "brief explanation",
   "isClaimRelated": true/false,
-  "importance": "HIGH/MEDIUM/LOW",
-  "possiblePolicyNumber": "if pattern found in filename",
-  "possibleClaimNumber": "if pattern found in filename"
+  "importance": "HIGH|MEDIUM|LOW",
+  "keyFindings": {
+    "claimNumber": "found or null",
+    "policyNumber": "found or null",
+    "vehicleRegistration": "found or null",
+    "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
+    "incidentDate": "YYYY-MM-DD or null",
+    "incidentLocation": "found or null",
+    "incidentDescription": "brief description or null",
+    "policyHolderName": "found or null",
+    "policyHolderIdNumber": "found or null",
+    "policyHolderPhone": "found or null",
+    "policyHolderEmail": "found or null",
+    "vehicleMake": "found or null",
+    "vehicleModel": "found or null",
+    "vehicleYear": "found or null",
+    "insuredName": "found or null",
+    "sumInsured": number or null,
+    "excess": number or null,
+    "premium": number or null,
+    "inceptionDate": "YYYY-MM-DD or null",
+    "expiryDate": "YYYY-MM-DD or null"
+  },
+  "extractedText": "key text snippets from the document",
+  "allNumbersFound": ["list of all claim/policy/reference numbers found"]
 }`;
 
   try {
-    // Use regular LLM (not Vision) for PDF analysis
+    // Use regular LLM for PDF analysis
     const response = await zai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -1165,34 +1196,59 @@ Respond in JSON format:
         importance: parsed.importance || "LOW"
       };
       
-      // Extract data based on document type
+      // Build claim data from findings
       let claimData: ClaimFormData | undefined;
       let policyData: PolicyScheduleData | undefined;
       
-      if (classification.documentType === "CLAIM_FORM") {
-        // Create claim data with extracted info
+      const findings = parsed.keyFindings || {};
+      
+      if (classification.documentType === "CLAIM_FORM" || findings.claimNumber) {
         claimData = {
           ...getEmptyClaimFormData(),
-          claimNumber: parsed.possibleClaimNumber || null,
-          policyNumber: parsed.possiblePolicyNumber || null,
-          extractionConfidence: 30,
-          extractedFields: parsed.possibleClaimNumber ? ['claimNumber'] : []
-        };
-      } else if (classification.documentType === "POLICY_SCHEDULE") {
-        // Create policy data with extracted info
-        policyData = {
-          ...getEmptyPolicyScheduleData(),
-          policyNumber: parsed.possiblePolicyNumber || null,
-          extractionConfidence: 30,
-          extractedFields: parsed.possiblePolicyNumber ? ['policyNumber'] : []
+          claimNumber: findings.claimNumber || null,
+          policyNumber: findings.policyNumber || null,
+          claimType: findings.claimType || null,
+          incidentDate: findings.incidentDate || null,
+          incidentLocation: findings.incidentLocation || null,
+          incidentDescription: findings.incidentDescription || null,
+          policyHolderName: findings.policyHolderName || null,
+          policyHolderIdNumber: findings.policyHolderIdNumber || null,
+          policyHolderPhone: findings.policyHolderPhone || null,
+          policyHolderEmail: findings.policyHolderEmail || null,
+          vehicleRegistration: findings.vehicleRegistration || null,
+          vehicleMake: findings.vehicleMake || null,
+          vehicleModel: findings.vehicleModel || null,
+          vehicleYear: findings.vehicleYear || null,
+          extractionConfidence: classification.confidence,
+          extractedFields: Object.keys(findings).filter(k => findings[k] !== null && findings[k] !== undefined)
         };
       }
       
-      console.log(`[analyzePdfWithLlm] Classified ${fileName} as ${classification.documentType} (confidence: ${classification.confidence})`);
+      if (classification.documentType === "POLICY_SCHEDULE" || (findings.policyNumber && !findings.claimNumber)) {
+        policyData = {
+          ...getEmptyPolicyScheduleData(),
+          policyNumber: findings.policyNumber || null,
+          insuredName: findings.insuredName || findings.policyHolderName || null,
+          vehicleRegistration: findings.vehicleRegistration || null,
+          vehicleMake: findings.vehicleMake || null,
+          vehicleModel: findings.vehicleModel || null,
+          vehicleYear: findings.vehicleYear ? parseInt(findings.vehicleYear) : null,
+          sumInsured: findings.sumInsured || null,
+          excess: findings.excess || null,
+          premium: findings.premium || null,
+          inceptionDate: findings.inceptionDate || null,
+          expiryDate: findings.expiryDate || null,
+          extractionConfidence: classification.confidence,
+          extractedFields: Object.keys(findings).filter(k => findings[k] !== null && findings[k] !== undefined)
+        };
+      }
+      
+      console.log(`[analyzePdfWithLlm] Classified ${fileName} as ${classification.documentType} (confidence: ${classification.confidence}%)`);
+      console.log(`[analyzePdfWithLlm] Extracted fields: ${Object.keys(findings).filter(k => findings[k] !== null).join(', ')}`);
       
       return {
         classification,
-        extractedText: `Filename: ${fileName}`,
+        extractedText: pdfText || `Filename: ${fileName}`,
         claimData,
         policyData
       };

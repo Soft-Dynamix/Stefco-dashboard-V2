@@ -1396,3 +1396,48 @@ UI Features Added:
 - Loading spinner while fetching analysis
 - Button state shows "Loading..." during analysis
 
+
+---
+Task ID: 50
+Agent: Main Agent
+Task: Add Full PDF Content Analysis
+
+Work Log:
+- User asked if system checks all info in all docs
+- Identified that PDF analysis was only checking filenames, not content
+- Installed pdf-parse library for PDF text extraction
+- Updated analyzePdfWithLlm to:
+  - Extract actual text content from PDF documents
+  - Send extracted text to LLM for comprehensive analysis
+  - Extract all key information including:
+    - Claim numbers
+    - Policy numbers
+    - Vehicle registrations (SA format: XX XX GP)
+    - Policy holder details (name, ID, phone, email)
+    - Vehicle details (make, model, year)
+    - Financial info (sum insured, excess, premium)
+    - Dates (inception, expiry, incident dates)
+  - Build proper claim/policy data structures from findings
+
+Stage Summary:
+- PDFs now analyzed for actual content, not just filenames
+- Text extracted using pdf-parse library
+- LLM analyzes up to 8000 chars of PDF text
+- All key information extracted and displayed in UI
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts - Added PDF text extraction and comprehensive analysis
+
+Package Added:
+- pdf-parse@2.4.5 - For extracting text from PDF documents
+
+PDF Analysis Now Extracts:
+- Document type (claim form, policy schedule, invoice, etc.)
+- Claim numbers and policy numbers
+- Vehicle registrations (South African format)
+- Policy holder/insured details
+- Vehicle information
+- Financial figures (sums, premiums, excess)
+- Key dates
+- Incident details
+
