@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
       isFollowUp,
       relatedClaimId,
       applyToSender,
+      applyToHistorical,
       suggestedRule,
     } = body;
 
@@ -123,6 +124,46 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+
+      // If applyToHistorical is true, also ignore all historical emails from this domain
+      let historicalEmailsCount = 0;
+      if (applyToHistorical && email.fromDomain) {
+        // Update all non-ignored, non-archived emails from this domain
+        const updateResult = await db.emailQueue.updateMany({
+          where: {
+            fromDomain: email.fromDomain,
+            status: {
+              notIn: ["IGNORED", "ARCHIVED", "CLAIM_CREATED"],
+            },
+          },
+          data: {
+            status: "IGNORED",
+            ignoreReason: rejectionReason || `Domain ${email.fromDomain} added to ignore list`,
+            ignoreCategory: rejectionCategory,
+            processedAt: new Date(),
+          },
+        });
+        historicalEmailsCount = updateResult.count;
+
+        // Log bulk ignore action
+        if (historicalEmailsCount > 0) {
+          await db.auditLog.create({
+            data: {
+              action: "bulk_ignore_historical_emails",
+              entityType: "sender_domain",
+              entityId: email.fromDomain,
+              details: JSON.stringify({
+                domain: email.fromDomain,
+                category: rejectionCategory,
+                emailsIgnored: historicalEmailsCount,
+                reason: rejectionReason || "Domain added to ignore list",
+              }),
+              status: "SUCCESS",
+              processedBy: "SYSTEM",
+            },
+          });
+        }
+      }
     }
 
     // Update sender pattern stats
@@ -161,7 +202,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, feedback });
+    return NextResponse.json({ 
+      success: true, 
+      feedback,
+      historicalEmailsIgnored: applyToHistorical && email.fromDomain ? 
+        (await db.emailQueue.count({
+          where: {
+            fromDomain: email.fromDomain,
+            status: "IGNORED",
+          },
+        })) - 1 : 0, // -1 because we already counted the current email
+    });
   } catch (error) {
     console.error("Error submitting rejection feedback:", error);
     return NextResponse.json(

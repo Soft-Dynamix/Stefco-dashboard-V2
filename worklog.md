@@ -1013,3 +1013,39 @@ const decodeQuotedPrintable = (str: string): string => {
 ```
 
 The frontend fix serves as a fallback for emails already in the database with encoding artifacts.
+
+---
+
+Task ID: 46
+Agent: Main Agent
+Task: Add "Ignore All Historical Emails from Domain" Feature
+
+Work Log:
+- User requested that when a domain is added to the ignore list, all historical emails from that domain should also be ignored
+- Added `applyToHistorical` parameter to RejectionFeedbackData interface
+- Modified rejection-feedback API to update all non-ignored, non-archived, non-claim-created emails from the domain when this option is enabled
+- Added new checkbox in feedback modal: "Also ignore all historical emails from this domain"
+- Updated toast message to show count of historical emails affected
+- Added audit log entry for bulk historical ignore actions
+
+Stage Summary:
+- When adding a domain to the ignore list, users can now optionally ignore all historical emails from that domain
+- This saves time by not having to manually ignore each email individually
+- Clear feedback in toast message showing how many historical emails were affected
+
+Files Modified:
+- src/app/api/rejection-feedback/route.ts - Added historical email bulk update logic
+- src/components/feedback-modal.tsx - Added "applyToHistorical" checkbox option
+- src/components/sections/inbox-section.tsx - Updated toast message with historical count
+
+UI Changes:
+- New nested checkbox in feedback modal (only shows when "Create ignore rule" is checked)
+- Option: "Also ignore all historical emails from this domain"
+- Description: "Mark all previous emails from {domain} as ignored (excluding archived and claim-created)"
+- Toast message now includes: "and X historical emails from this domain also ignored"
+
+API Changes:
+- New parameter: `applyToHistorical` (boolean, optional)
+- New response field: `historicalEmailsIgnored` (number)
+- Uses `updateMany` to efficiently bulk update historical emails
+- Creates audit log entry for tracking bulk operations

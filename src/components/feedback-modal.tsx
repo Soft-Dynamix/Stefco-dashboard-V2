@@ -60,6 +60,7 @@ export interface RejectionFeedbackData {
   isFollowUp: boolean;
   relatedClaimId?: string;
   applyToSender: boolean;
+  applyToHistorical?: boolean;
   suggestedRule?: string;
 }
 
@@ -139,6 +140,7 @@ export function FeedbackModal({
   const [reason, setReason] = useState("");
   const [isFollowUp, setIsFollowUp] = useState(false);
   const [applyToSender, setApplyToSender] = useState(false);
+  const [applyToHistorical, setApplyToHistorical] = useState(false);
   const [relatedClaimId, setRelatedClaimId] = useState("");
   const [suggestedRule, setSuggestedRule] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -286,6 +288,7 @@ export function FeedbackModal({
         isFollowUp,
         relatedClaimId: relatedClaimId || undefined,
         applyToSender,
+        applyToHistorical: applyToSender && applyToHistorical,
         suggestedRule: suggestedRule || undefined,
       });
       
@@ -294,6 +297,7 @@ export function FeedbackModal({
       setReason("");
       setIsFollowUp(false);
       setApplyToSender(false);
+      setApplyToHistorical(false);
       setRelatedClaimId("");
       setSuggestedRule("");
       onOpenChange(false);
@@ -309,8 +313,8 @@ export function FeedbackModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <XCircle className="h-5 w-5 text-red-500" />
             Why Ignore This Email?
@@ -320,7 +324,7 @@ export function FeedbackModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 px-6 py-4 overflow-y-auto flex-1 min-h-0">
           {/* Email Summary */}
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
             <div className="flex items-center gap-2">
@@ -426,7 +430,10 @@ export function FeedbackModal({
               <Checkbox
                 id="applyToSender"
                 checked={applyToSender}
-                onCheckedChange={(checked) => setApplyToSender(checked as boolean)}
+                onCheckedChange={(checked) => {
+                  setApplyToSender(checked as boolean);
+                  if (!checked) setApplyToHistorical(false);
+                }}
               />
               <Label htmlFor="applyToSender" className="font-normal cursor-pointer">
                 Create ignore rule for this sender/category
@@ -435,6 +442,24 @@ export function FeedbackModal({
             <p className="text-sm text-muted-foreground ml-6">
               Automatically apply this decision to future similar emails from {email?.fromDomain}
             </p>
+
+            {applyToSender && (
+              <div className="mt-3 ml-6 space-y-2 p-3 bg-background rounded border">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="applyToHistorical"
+                    checked={applyToHistorical}
+                    onCheckedChange={(checked) => setApplyToHistorical(checked as boolean)}
+                  />
+                  <Label htmlFor="applyToHistorical" className="font-normal cursor-pointer text-sm">
+                    Also ignore all historical emails from this domain
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  Mark all previous emails from {email?.fromDomain} as ignored (excluding archived and claim-created)
+                </p>
+              </div>
+            )}
 
             {suggestedRule && (
               <div className="mt-3 p-3 bg-background rounded border">
@@ -445,7 +470,7 @@ export function FeedbackModal({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 border-t flex-shrink-0 bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

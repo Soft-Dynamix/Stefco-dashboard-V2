@@ -160,10 +160,15 @@ export function InboxSection() {
   const fetchPollingStatus = async () => {
     try {
       const res = await fetch("/api/email-poll");
+      if (!res.ok) {
+        console.warn("Polling status fetch failed with status:", res.status);
+        return;
+      }
       const json = await res.json();
       setPollingStatus(json);
     } catch (error) {
-      console.error("Failed to fetch polling status:", error);
+      // Silently handle transient fetch errors during development
+      console.warn("Polling status fetch error (transient):", error);
     }
   };
 
@@ -299,11 +304,20 @@ export function InboxSection() {
       const json = await res.json();
 
       if (res.ok && json.success) {
+        const historicalCount = json.historicalEmailsIgnored || 0;
+        let description = "Email ignored. This helps the AI learn!";
+        
+        if (feedback.applyToSender) {
+          if (historicalCount > 0) {
+            description = `Email ignored, rule created for future emails, and ${historicalCount} historical email${historicalCount !== 1 ? 's' : ''} from this domain also ignored`;
+          } else {
+            description = "Email ignored and rule created for future emails from this sender";
+          }
+        }
+        
         toast({
           title: "Feedback Submitted",
-          description: feedback.applyToSender
-            ? "Email ignored and rule created for future emails from this sender"
-            : "Email ignored. This helps the AI learn!",
+          description,
         });
         fetchEmails();
         setDetailsOpen(false);
