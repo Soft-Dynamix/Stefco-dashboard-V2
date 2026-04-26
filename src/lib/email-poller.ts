@@ -2,6 +2,7 @@ import { ImapFlow } from "imapflow";
 import { db } from "./db";
 import crypto from "crypto";
 import ZAI from "z-ai-web-dev-sdk";
+import { extractAttachmentMetadataFromSource } from "./attachment-extractor";
 
 interface ImapConfig {
   host: string;
@@ -374,6 +375,9 @@ export async function fetchEmails(limit: number = 50): Promise<{
           fromEmail || ""
         );
         
+        // Extract attachments from the raw email source
+        const extractedAttachments = extractAttachmentMetadataFromSource(source);
+        
         const emailData: EmailMessage = {
           messageId: emailMessageId,
           subject: envelope.subject || null,
@@ -382,7 +386,7 @@ export async function fetchEmails(limit: number = 50): Promise<{
           to: envelope.to?.[0]?.address || null,
           bodyText: bodyText || source.substring(0, 5000),
           bodyHtml: bodyHtml || null,
-          attachments: [],
+          attachments: extractedAttachments,
           date: envelope.date || null,
         };
 

@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2025-04-27
+
+### Added
+- **Attachment Refetch System** - Retrieve attachments for historical emails
+  - "Refetch Attachments" button in Email Inbox
+  - Badge showing count of emails needing attachment refetch
+  - Batch processing via IMAP for old emails without attachments
+  - Automatic marking of emails that have no attachments (NO_ATTACHMENTS marker)
+  - Handles emails that no longer exist in IMAP gracefully
+  - Audit logging for refetch operations
+
+- **Attachment Extraction Module** - New `attachment-extractor.ts` library
+  - MIME boundary parsing for multipart emails
+  - Base64 and quoted-printable decoding
+  - Content-Disposition header parsing for filenames
+  - Support for embedded images, PDFs, and documents
+  - IMAP integration for refetch operations
+
+- **Refetch Attachments API** - New endpoint for attachment management
+  - GET /api/refetch-attachments - Get attachment statistics
+  - POST /api/refetch-attachments - Batch refetch attachments
+  - Supports single email refetch by ID or Message-ID
+
+### Changed
+- Email poller now extracts attachments during initial email fetch
+- Attachments tab shows "Email has been checked" for emails with no attachments
+- Badge count properly decreases after refetch operations
+
+### Fixed
+- Refetch attachments badge stuck at same count after clicking
+- Emails without attachments being re-processed repeatedly
+- Unmatched emails (not found in IMAP) now marked as checked
+- Memory leaks in attachment extraction process
+
+### Technical Details
+- Uses "NO_ATTACHMENTS" marker to distinguish between:
+  - `null` - Email hasn't been checked for attachments
+  - `"[]"` - Legacy empty array (treated as unchecked)
+  - `"NO_ATTACHMENTS"` - Checked, confirmed no attachments
+  - JSON array - Has actual attachments
+
 ## [2.3.0] - 2025-04-27
 
 ### Added
@@ -196,6 +237,7 @@ The system now analyzes attachment content, not just filenames, to determine if 
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 2.4.0 | 2025-04-27 | Attachment refetch system, extraction module, badge count fixes |
 | 2.3.0 | 2025-04-27 | AI attachment analysis, document classification, claim likelihood scoring |
 | 2.2.0 | 2025-04-26 | Bulk operations, HTML email rendering, AI auto-fill, encoding fixes |
 | 2.1.0 | 2025-04-26 | Archive system, pagination, auto-analysis |
@@ -204,13 +246,13 @@ The system now analyzes attachment content, not just filenames, to determine if 
 
 ## Upcoming Features (Roadmap)
 
-### v2.4.0 (Planned)
+### v2.5.0 (Planned)
 - [ ] Advanced search with date range filters
 - [ ] Email export to CSV/Excel
 - [ ] Dashboard widget customization
 - [ ] Real-time notifications with WebSocket
 
-### v2.5.0 (Planned)
+### v2.6.0 (Planned)
 - [ ] Email threading visualization
 - [ ] Advanced analytics charts
 - [ ] API rate limiting

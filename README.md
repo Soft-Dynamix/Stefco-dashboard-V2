@@ -15,7 +15,14 @@ STEFCO Claims Dashboard is a comprehensive claims management platform that autom
 - **Learning Engine** - Pattern learning from user corrections
 - **Attachment Processing** - VLM-based extraction from images/PDFs
 
-### Attachment Intelligence (v2.3.0)
+### Attachment Intelligence (v2.4.0)
+- **Attachment Refetch System** - Retrieve attachments for historical emails
+- **MIME Parsing** - Extract attachments from raw email source
+- **IMAP Integration** - Batch refetch attachments from mail server
+- **Smart Marking** - Emails without attachments marked to prevent re-processing
+- **Badge Tracking** - Real-time count of emails needing attachment refetch
+
+### Document Analysis (v2.3.0)
 - **AI Document Classification** - Classifies attachments into 15 document types
 - **Claim Form Extraction** - Extracts claim number, policy holder, vehicle details
 - **Policy Schedule Extraction** - Extracts policy numbers, coverage, insured items
@@ -88,6 +95,7 @@ src/
 └── lib/
     ├── db.ts                   # Prisma client
     ├── email-poller.ts         # IMAP email fetching with decoding
+    ├── attachment-extractor.ts # MIME parsing & IMAP refetch
     ├── extraction-patterns.ts  # Pattern learning utilities
     ├── attachment-processor.ts # VLM attachment extraction
     ├── attachment-ai-analyzer.ts # AI document classification & extraction
@@ -143,6 +151,12 @@ POST   /api/email-poll      # Trigger manual poll
 POST   /api/process-email   # AI classification & extraction
 POST   /api/enhanced-extract # Ensemble extraction with attachments
 POST   /api/attachment-analysis # AI document analysis
+```
+
+### Attachment Management (v2.4.0)
+```
+GET    /api/refetch-attachments # Get attachment statistics
+POST   /api/refetch-attachments # Batch refetch attachments from IMAP
 ```
 
 ### Attachment Analysis (v2.3.0)
@@ -322,6 +336,14 @@ CMD ["bun", "run", "start"]
 ```
 
 ## Recent Changes
+
+### v2.4.0 (2025-04-27)
+- **Attachment Refetch System**: Retrieve attachments for historical emails
+- **MIME Parsing Module**: Extract attachments from raw email source
+- **IMAP Batch Refetch**: Process multiple emails at once
+- **Smart Marking**: Emails without attachments marked to prevent re-processing
+- **Badge Tracking**: Real-time count of emails needing refetch
+- **Bug Fix**: Badge count now properly decreases after refetch operations
 
 ### v2.3.0 (2025-04-27)
 - **AI-Powered Attachment Analysis**: Intelligent document processing for claim detection

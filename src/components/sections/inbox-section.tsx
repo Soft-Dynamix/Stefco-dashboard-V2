@@ -122,6 +122,14 @@ export function InboxSection() {
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [showHtmlView, setShowHtmlView] = useState(true);
+  const [isRefetchingAttachments, setIsRefetchingAttachments] = useState(false);
+  const [attachmentStats, setAttachmentStats] = useState<{
+    totalEmails: number;
+    emailsWithAttachments: number;
+    emailsWithoutAttachments: number;
+    totalAttachments: number;
+    activeEmailsNeedingRefetch: number;
+  } | null>(null);
   const { toast } = useToast();
 
   // Decode quoted-printable encoding (for emails stored before the fix)
@@ -326,6 +334,66 @@ export function InboxSection() {
       setIsAnalyzingPending(false);
     }
   };
+
+  // Fetch attachment statistics
+  const fetchAttachmentStats = async () => {
+    try {
+      const res = await fetch("/api/refetch-attachments");
+      const json = await res.json();
+      if (json.stats) {
+        setAttachmentStats(json.stats);
+      }
+    } catch (error) {
+      console.error("Failed to fetch attachment stats:", error);
+    }
+  };
+
+  // Refetch attachments for old emails
+  const refetchAttachments = async (emailId?: string) => {
+    setIsRefetchingAttachments(true);
+    toast({
+      title: "Refetching Attachments",
+      description: "Connecting to IMAP to fetch email attachments...",
+    });
+
+    try {
+      const res = await fetch("/api/refetch-attachments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 50, emailId }),
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        toast({
+          title: "Attachments Refetched",
+          description: json.message || `Processed ${json.processed} emails, found attachments in ${json.updated}`,
+        });
+        fetchEmails();
+        fetchAttachmentStats();
+      } else {
+        toast({
+          title: "Refetch Failed",
+          description: json.error || json.errors?.[0] || "Failed to refetch attachments",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refetch attachments",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefetchingAttachments(false);
+    }
+  };
+
+  // Fetch attachment stats on mount
+  useEffect(() => {
+    fetchAttachmentStats();
+  }, []);
 
   const viewEmail = (email: Email) => {
     setSelectedEmail(email);
@@ -794,6 +862,30 @@ export function InboxSection() {
                 )}
               </Button>
 
+              <Button
+                variant="outline"
+                onClick={() => refetchAttachments()}
+                disabled={isRefetchingAttachments || !pollingStatus?.isConfigured}
+                className="min-w-[150px]"
+              >
+                {isRefetchingAttachments ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Refetching...
+                  </>
+                ) : (
+                  <>
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    Refetch Attachments
+                    {attachmentStats && attachmentStats.emailsWithoutAttachments > 0 && (
+                      <span className="ml-1 bg-amber-500 text-white text-xs px-1.5 rounded-full">
+                        {attachmentStats.emailsWithoutAttachments}
+                      </span>
+                    )}
+                  </>
+                )}
+              </Button>
+
               {!pollingStatus?.isConfigured && (
                 <p className="text-sm text-muted-foreground">
                   Configure IMAP settings to enable polling
@@ -1101,7 +1193,7 @@ export function InboxSection() {
                   <TabsTrigger value="attachments" className="gap-2 text-sm h-8 px-4">
                     <Paperclip className="h-4 w-4" />
                     Attachments
-                    {selectedEmail.attachments && (() => {
+                    {selectedEmail.attachments && selectedEmail.attachments !== "NO_ATTACHMENTS" && (() => {
                       try {
                         const atts = JSON.parse(selectedEmail.attachments);
                         return atts.length > 0 ? (
@@ -1217,7 +1309,13 @@ export function InboxSection() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="py-4">
-                        {selectedEmail.attachments ? (
+                        {selectedEmail.attachments === "NO_ATTACHMENTS" ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <FileCheck className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No attachments in this email</p>
+                            <p className="text-xs mt-1 opacity-70">Email has been checked</p>
+                          </div>
+                        ) : selectedEmail.attachments ? (
                           (() => {
                             try {
                               const attachments = JSON.parse(selectedEmail.attachments);
