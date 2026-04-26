@@ -544,22 +544,26 @@ Respond in JSON format:
     );
 
     const content = response.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+
+    // Use robust JSON parsing to handle malformed LLM responses
+    try {
+      const parsed = parseJsonRobustly(content) as Record<string, unknown>;
       console.log(`[classifyDocument] Successfully classified ${fileName} as ${parsed.documentType}`);
       return {
-        documentType: parsed.documentType || "OTHER",
-        confidence: parsed.confidence || 50,
-        reasoning: parsed.reasoning || "",
-        isClaimRelated: parsed.isClaimRelated ?? false,
-        importance: parsed.importance || "LOW"
+        documentType: (parsed.documentType as string) || "OTHER",
+        confidence: (parsed.confidence as number) || 50,
+        reasoning: (parsed.reasoning as string) || "",
+        isClaimRelated: (parsed.isClaimRelated as boolean) ?? false,
+        importance: (parsed.importance as "HIGH" | "MEDIUM" | "LOW") || "LOW"
       };
+    } catch (parseError) {
+      console.error(`[classifyDocument] JSON parse error for ${fileName}:`, parseError);
+      // Return a fallback classification based on filename
+      return classifyByFilename(fileName);
     }
   } catch (error) {
     console.error(`[classifyDocument] Failed to classify ${fileName}:`, error);
-    
+
     // Return a fallback classification based on filename
     return classifyByFilename(fileName);
   }
@@ -735,45 +739,44 @@ Respond in JSON format with null for fields not found:
 
 function parseClaimFormResponse(response: string): ClaimFormData {
   const empty = getEmptyClaimFormData();
-  
+
   try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return empty;
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    
+    // Use robust JSON parsing to handle malformed LLM responses
+    const parsed = parseJsonRobustly(response) as Record<string, unknown>;
+    if (!parsed) return empty;
+
     return {
-      claimNumber: parsed.claimNumber || null,
-      claimType: parsed.claimType || null,
-      incidentDate: parsed.incidentDate || null,
-      incidentTime: parsed.incidentTime || null,
-      incidentLocation: parsed.incidentLocation || null,
-      incidentDescription: parsed.incidentDescription || null,
-      policyHolderName: parsed.policyHolderName || null,
-      policyHolderIdNumber: parsed.policyHolderIdNumber || null,
-      policyHolderPhone: parsed.policyHolderPhone || null,
-      policyHolderEmail: parsed.policyHolderEmail || null,
-      policyHolderAddress: parsed.policyHolderAddress || null,
-      policyNumber: parsed.policyNumber || null,
-      policyStartDate: parsed.policyStartDate || null,
-      policyEndDate: parsed.policyEndDate || null,
-      vehicleRegistration: parsed.vehicleRegistration || null,
-      vehicleMake: parsed.vehicleMake || null,
-      vehicleModel: parsed.vehicleModel || null,
-      vehicleYear: parsed.vehicleYear || null,
-      vehicleColor: parsed.vehicleColor || null,
-      vehicleVinNumber: parsed.vehicleVinNumber || null,
-      driverName: parsed.driverName || null,
-      driverIdNumber: parsed.driverIdNumber || null,
-      driverLicenseNumber: parsed.driverLicenseNumber || null,
-      thirdPartyName: parsed.thirdPartyName || null,
-      thirdPartyVehicleReg: parsed.thirdPartyVehicleReg || null,
-      thirdPartyInsurance: parsed.thirdPartyInsurance || null,
-      thirdPartyPhone: parsed.thirdPartyPhone || null,
+      claimNumber: (parsed.claimNumber as string) || null,
+      claimType: (parsed.claimType as string) || null,
+      incidentDate: (parsed.incidentDate as string) || null,
+      incidentTime: (parsed.incidentTime as string) || null,
+      incidentLocation: (parsed.incidentLocation as string) || null,
+      incidentDescription: (parsed.incidentDescription as string) || null,
+      policyHolderName: (parsed.policyHolderName as string) || null,
+      policyHolderIdNumber: (parsed.policyHolderIdNumber as string) || null,
+      policyHolderPhone: (parsed.policyHolderPhone as string) || null,
+      policyHolderEmail: (parsed.policyHolderEmail as string) || null,
+      policyHolderAddress: (parsed.policyHolderAddress as string) || null,
+      policyNumber: (parsed.policyNumber as string) || null,
+      policyStartDate: (parsed.policyStartDate as string) || null,
+      policyEndDate: (parsed.policyEndDate as string) || null,
+      vehicleRegistration: (parsed.vehicleRegistration as string) || null,
+      vehicleMake: (parsed.vehicleMake as string) || null,
+      vehicleModel: (parsed.vehicleModel as string) || null,
+      vehicleYear: (parsed.vehicleYear as string) || null,
+      vehicleColor: (parsed.vehicleColor as string) || null,
+      vehicleVinNumber: (parsed.vehicleVinNumber as string) || null,
+      driverName: (parsed.driverName as string) || null,
+      driverIdNumber: (parsed.driverIdNumber as string) || null,
+      driverLicenseNumber: (parsed.driverLicenseNumber as string) || null,
+      thirdPartyName: (parsed.thirdPartyName as string) || null,
+      thirdPartyVehicleReg: (parsed.thirdPartyVehicleReg as string) || null,
+      thirdPartyInsurance: (parsed.thirdPartyInsurance as string) || null,
+      thirdPartyPhone: (parsed.thirdPartyPhone as string) || null,
       excessAmount: typeof parsed.excessAmount === 'number' ? parsed.excessAmount : null,
       estimatedDamage: typeof parsed.estimatedDamage === 'number' ? parsed.estimatedDamage : null,
-      extractionConfidence: parsed.extractionConfidence || 50,
-      extractedFields: parsed.extractedFields || []
+      extractionConfidence: (parsed.extractionConfidence as number) || 50,
+      extractedFields: (parsed.extractedFields as string[]) || []
     };
   } catch (error) {
     console.error("Failed to parse claim form response:", error);
@@ -913,40 +916,39 @@ Respond in JSON format with null for fields not found:
 
 function parsePolicyScheduleResponse(response: string): PolicyScheduleData {
   const empty = getEmptyPolicyScheduleData();
-  
+
   try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return empty;
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    
+    // Use robust JSON parsing to handle malformed LLM responses
+    const parsed = parseJsonRobustly(response) as Record<string, unknown>;
+    if (!parsed) return empty;
+
     return {
-      policyNumber: parsed.policyNumber || null,
-      policyType: parsed.policyType || null,
-      policyStatus: parsed.policyStatus || null,
-      insuredName: parsed.insuredName || null,
-      insuredIdNumber: parsed.insuredIdNumber || null,
-      insuredPhone: parsed.insuredPhone || null,
-      insuredEmail: parsed.insuredEmail || null,
-      insuredAddress: parsed.insuredAddress || null,
-      coverageType: parsed.coverageType || null,
+      policyNumber: (parsed.policyNumber as string) || null,
+      policyType: (parsed.policyType as string) || null,
+      policyStatus: (parsed.policyStatus as string) || null,
+      insuredName: (parsed.insuredName as string) || null,
+      insuredIdNumber: (parsed.insuredIdNumber as string) || null,
+      insuredPhone: (parsed.insuredPhone as string) || null,
+      insuredEmail: (parsed.insuredEmail as string) || null,
+      insuredAddress: (parsed.insuredAddress as string) || null,
+      coverageType: (parsed.coverageType as string) || null,
       sumInsured: typeof parsed.sumInsured === 'number' ? parsed.sumInsured : null,
       premium: typeof parsed.premium === 'number' ? parsed.premium : null,
       excess: typeof parsed.excess === 'number' ? parsed.excess : null,
-      vehicleRegistration: parsed.vehicleRegistration || null,
-      vehicleMake: parsed.vehicleMake || null,
-      vehicleModel: parsed.vehicleModel || null,
+      vehicleRegistration: (parsed.vehicleRegistration as string) || null,
+      vehicleMake: (parsed.vehicleMake as string) || null,
+      vehicleModel: (parsed.vehicleModel as string) || null,
       vehicleYear: typeof parsed.vehicleYear === 'number' ? parsed.vehicleYear : null,
-      vehicleColor: parsed.vehicleColor || null,
-      vehicleVinNumber: parsed.vehicleVinNumber || null,
-      engineNumber: parsed.engineNumber || null,
-      additionalDrivers: parsed.additionalDrivers || [],
-      benefits: parsed.benefits || [],
-      extensions: parsed.extensions || [],
-      inceptionDate: parsed.inceptionDate || null,
-      expiryDate: parsed.expiryDate || null,
-      extractionConfidence: parsed.extractionConfidence || 50,
-      extractedFields: parsed.extractedFields || []
+      vehicleColor: (parsed.vehicleColor as string) || null,
+      vehicleVinNumber: (parsed.vehicleVinNumber as string) || null,
+      engineNumber: (parsed.engineNumber as string) || null,
+      additionalDrivers: (parsed.additionalDrivers as Array<{name: string; idNumber: string; relationship: string}>) || [],
+      benefits: (parsed.benefits as string[]) || [],
+      extensions: (parsed.extensions as string[]) || [],
+      inceptionDate: (parsed.inceptionDate as string) || null,
+      expiryDate: (parsed.expiryDate as string) || null,
+      extractionConfidence: (parsed.extractionConfidence as number) || 50,
+      extractedFields: (parsed.extractedFields as string[]) || []
     };
   } catch (error) {
     console.error("Failed to parse policy schedule response:", error);
@@ -1508,11 +1510,23 @@ Respond in JSON format:
     );
 
     const content = response.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      
+
+    // Use robust JSON parsing to handle malformed LLM responses
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = parseJsonRobustly(content) as Record<string, unknown>;
+    } catch (parseError) {
+      console.error(`[analyzePdfWithLlm] JSON parse error for ${fileName}:`, parseError);
+      console.error(`[analyzePdfWithLlm] Raw content (first 300 chars):`, content.substring(0, 300));
+
+      // Return fallback classification based on filename
+      return {
+        ...classifyPdfByFilename(fileName),
+        processingError: pdfExtractionError || "AI response could not be parsed - using filename-based classification"
+      };
+    }
+
+    if (parsed) {
       const classification: DocumentClassification = {
         documentType: parsed.documentType || "OTHER",
         confidence: parsed.confidence || 50,
