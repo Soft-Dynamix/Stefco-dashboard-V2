@@ -1842,3 +1842,113 @@ Vehicle Details Extraction:
 - 16 common colors recognized
 
 This ensures that even if the LLM misses vehicle details, the post-processing will catch them from the extracted PDF text.
+
+---
+
+Task ID: 49
+Agent: Main Agent
+Task: Remove PDF text limit and extract vehicle details from ALL sources
+
+Work Log:
+- User requested: No limit on PDF text extraction
+- User requested: Vehicle details should be extracted from ALL document types (not just quotations)
+- User requested: Vehicle details should be extracted from email subject and body
+- Removed PDF text truncation entirely - now extracts ALL text from documents
+- Updated AI prompts to extract vehicle details from ALL document types:
+  - Quotations, Claim Forms, Policy Schedules, Invoices
+  - Police Reports, Vehicle Assessments, Repair Quotes
+  - Correspondence and Other documents
+- Added vehicle detail extraction to email processing pipeline:
+  - Extracts from email subject
+  - Extracts from email body
+  - Extracts from attachment text
+- Added 6 new vehicle fields to extraction:
+  - vehicleVinNumber (VIN/Chassis)
+  - vehicleMake
+  - vehicleModel
+  - vehicleYear
+  - vehicleColor
+  - engineNumber
+- Updated AI extraction prompt to include specific vehicle detail instructions
+- Removed truncation from AI extraction (was 2000 chars, now full content)
+
+Stage Summary:
+- Vehicle details now extracted from ALL sources: email subject, email body, attachments
+- No more text truncation - full content is analyzed
+- VIN/Chassis numbers can be found anywhere in the email thread or documents
+- All document types are scanned for vehicle details
+- Pattern-based extraction for make, year, color, engine number
+- AI fills in any missing details with targeted extraction
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts:
+  - Removed PDF text truncation (was limited to 20000 chars)
+  - Updated AI prompt to extract vehicle details from ALL document types
+  - Added vehicle detail instructions for each document type category
+  
+- src/lib/enhanced-extraction-pipeline.ts:
+  - Added import for findAllPossibleVins and extractVehicleDetails
+  - Added vehicle detail extraction from email subject + body + attachments combined
+  - Added 6 new vehicle fields: vehicleVinNumber, vehicleMake, vehicleModel, vehicleYear, vehicleColor, engineNumber
+  - Updated AI extraction prompt with vehicle detail instructions
+  - Removed text truncation from AI extraction (was 2000 chars)
+
+Key Changes:
+1. PDF Text: No limit - extracts ALL text
+2. Email Body: No truncation in AI extraction
+3. Vehicle Sources: Email subject + Email body + Attachments
+4. Document Types: ALL types scanned for vehicle details
+5. New Fields: VIN, Make, Model, Year, Color, Engine Number
+
+This ensures vehicle details are never missed regardless of where they appear in the email chain or documents.
+
+---
+
+Task ID: 50
+Agent: Main Agent
+Task: Add vehicle fields to database schema and update APIs
+
+Work Log:
+- Added new vehicle fields to Claim model in Prisma schema:
+  - vehicleVinNumber (String) - VIN/Chassis Number
+  - vehicleYear (Int) - Year of manufacture
+  - vehicleColor (String) - Vehicle color
+  - engineNumber (String) - Engine number
+- Pushed schema changes to database (db:push)
+- Updated claims API to handle new vehicle fields in POST
+- Updated claims API learning section to include new vehicle fields
+- Updated claim-feedback API to validate new vehicle fields
+- All APIs now support full vehicle detail extraction
+
+Stage Summary:
+- Database schema updated with 4 new vehicle fields
+- Claims can now store VIN, year, color, and engine number
+- Learning system learns from vehicle field corrections
+- Feedback system validates new vehicle field names
+- Full vehicle detail pipeline now complete
+
+Files Modified:
+- prisma/schema.prisma - Added vehicleVinNumber, vehicleYear, vehicleColor, engineNumber to Claim model
+- src/app/api/claims/route.ts - Added new vehicle fields to claim creation and learning
+- src/app/api/claim-feedback/route.ts - Added new vehicle fields to validation
+
+Database Schema Changes:
+```prisma
+model Claim {
+  vehicleVinNumber      String?  // VIN/Chassis Number (17 characters)
+  vehicleYear           Int?     // Year of manufacture
+  vehicleColor          String?
+  engineNumber          String?  // Engine number
+}
+```
+
+Complete Vehicle Field Set Now:
+1. vehicleRegistration - SA format (XX XX GP)
+2. vehicleVinNumber - VIN/Chassis (17 chars)
+3. vehicleMake - Toyota, VW, BMW, etc.
+4. vehicleModel - Corolla, Polo, etc.
+5. vehicleYear - Year of manufacture
+6. vehicleColor - Vehicle color
+7. engineNumber - Engine number
+
+This completes the comprehensive vehicle detail extraction feature.

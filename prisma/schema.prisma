@@ -47,8 +47,12 @@ model Claim {
   incidentDate          DateTime?
   incidentDescription   String?
   vehicleRegistration   String?
+  vehicleVinNumber      String?  // VIN/Chassis Number (17 characters)
   vehicleMake           String?
   vehicleModel          String?
+  vehicleYear           Int?     // Year of manufacture
+  vehicleColor          String?
+  engineNumber          String?  // Engine number
   propertyAddress       String?
   excessAmount          Float?
   status                String   @default("NEW") // NEW, IN_PROGRESS, PENDING_INFO, COMPLETED, CLOSED

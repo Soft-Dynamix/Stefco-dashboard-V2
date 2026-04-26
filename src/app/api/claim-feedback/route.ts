@@ -126,8 +126,10 @@ export async function POST(request: NextRequest) {
 function isValidExtractableField(field: string): boolean {
   const validFields: ExtractableField[] = [
     "claimNumber", "policyNumber", "clientName", "clientEmail",
-    "clientPhone", "vehicleRegistration", "vehicleMake", "vehicleModel",
-    "propertyAddress", "excessAmount", "incidentDate", "incidentDescription", "claimType"
+    "clientPhone", "vehicleRegistration", "vehicleVinNumber", 
+    "vehicleMake", "vehicleModel", "vehicleYear", "vehicleColor", 
+    "engineNumber", "propertyAddress", "excessAmount", 
+    "incidentDate", "incidentDescription", "claimType"
   ];
   return validFields.includes(field as ExtractableField);
 }

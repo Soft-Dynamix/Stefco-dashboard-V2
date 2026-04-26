@@ -50,6 +50,7 @@ import {
   EvidenceRecord,
   buildFieldEvidenceSummary,
 } from "@/lib/evidence-tracker";
+import { findAllPossibleVins, extractVehicleDetails } from "@/lib/extraction-patterns";
 
 // Cache ZAI instance
 let zaiInstance: ZAI | null = null;
@@ -430,6 +431,70 @@ async function runEnhancedExtractionAgent(
     extractionHints
   );
   
+  // =====================================================
+  // VEHICLE DETAILS EXTRACTION - FROM ALL SOURCES
+  // Extract from: email subject, email body, attachments
+  // =====================================================
+  
+  // Combine all text sources for vehicle detail extraction
+  const allTextForVehicle = [
+    emailData.subject || "",
+    emailData.bodyText || "",
+    attachmentResult.combinedText || "",
+  ].join("\n\n");
+  
+  // Extract VIN/Chassis Number - search ALL text sources
+  const foundVins = findAllPossibleVins(allTextForVehicle);
+  if (foundVins.length > 0) {
+    fields.vehicleVinNumber = {
+      value: foundVins[0],
+      confidence: 85,
+      source: foundVins.length > 1 ? "multiple_sources" : "pattern_extraction",
+      sources: foundVins,
+      evidence: `Found VIN pattern in text: ${foundVins[0]}`,
+    };
+    console.log(`[extraction] Found VIN from email/attachments: ${foundVins[0]}`);
+  } else {
+    fields.vehicleVinNumber = { value: null, confidence: 0, source: "", sources: [], evidence: "" };
+  }
+  
+  // Extract other vehicle details (make, model, year, color, engine)
+  const vehicleDetails = extractVehicleDetails(allTextForVehicle);
+  
+  fields.vehicleMake = {
+    value: vehicleDetails.make,
+    confidence: vehicleDetails.make ? 75 : 0,
+    source: "pattern_extraction",
+    sources: [],
+    evidence: vehicleDetails.make ? `Found vehicle make: ${vehicleDetails.make}` : "",
+  };
+  
+  fields.vehicleModel = { value: null, confidence: 0, source: "", sources: [], evidence: "" }; // Model is harder to extract with regex, AI will handle
+  
+  fields.vehicleYear = {
+    value: vehicleDetails.year,
+    confidence: vehicleDetails.year ? 70 : 0,
+    source: "pattern_extraction",
+    sources: [],
+    evidence: vehicleDetails.year ? `Found year: ${vehicleDetails.year}` : "",
+  };
+  
+  fields.vehicleColor = {
+    value: vehicleDetails.color,
+    confidence: vehicleDetails.color ? 65 : 0,
+    source: "pattern_extraction",
+    sources: [],
+    evidence: vehicleDetails.color ? `Found color: ${vehicleDetails.color}` : "",
+  };
+  
+  fields.engineNumber = {
+    value: vehicleDetails.engineNumber,
+    confidence: vehicleDetails.engineNumber ? 75 : 0,
+    source: "pattern_extraction",
+    sources: [],
+    evidence: vehicleDetails.engineNumber ? `Found engine: ${vehicleDetails.engineNumber}` : "",
+  };
+  
   // Insurance Company - from domain intelligence
   fields.insuranceCompany = {
     value: extractionHints.companyHints.name || null,
@@ -544,19 +609,37 @@ async function runAIExtraction(
   
   const zai = await getZAI();
   
+  // No truncation - pass full content for comprehensive extraction
   const prompt = `Extract the following missing fields from this insurance claim email.
 
 MISSING FIELDS TO EXTRACT:
 ${missingFields.join(", ")}
 
+=== EXTRACTION INSTRUCTIONS ===
+
+**FOR VEHICLE DETAILS (vehicleVinNumber, vehicleMake, vehicleModel, vehicleYear, vehicleColor, engineNumber):**
+- VIN/CHASSIS: Look for 17-character alphanumeric codes (no I, O, Q)
+  * Labels: "VIN", "Chassis", "Chassis No", "Chassis Number", "Vehicle ID"
+  * Also check for standalone 17-char sequences
+- MAKE: Toyota, VW, BMW, Mercedes, Ford, Honda, Nissan, Mazda, Hyundai, Kia, Audi, Volvo, etc.
+- MODEL: Corolla, Polo, X3, C-Class, Ranger, Hilux, etc.
+- YEAR: 4-digit year (1990-2026)
+- COLOR: White, Black, Silver, Blue, Red, Grey, etc.
+- ENGINE NUMBER: Usually 6-12 alphanumeric characters
+
+**FOR CLIENT DETAILS (clientName, clientEmail, clientPhone):**
+- Name: Look in greetings, signatures, "Dear X", "From X"
+- Email: Standard email format
+- Phone: South African format (+27 or 0 prefix)
+
 EMAIL SUBJECT:
 ${subject}
 
-EMAIL BODY:
-${body.slice(0, 2000)}
+EMAIL BODY (FULL - NO TRUNCATION):
+${body}
 
-ATTACHMENT CONTENT:
-${attachmentText.slice(0, 2000)}
+ATTACHMENT CONTENT (FULL - NO TRUNCATION):
+${attachmentText}
 
 Respond with JSON only:
 {

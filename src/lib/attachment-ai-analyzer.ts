@@ -1111,12 +1111,9 @@ async function analyzePdfWithLlm(
     console.error(`[analyzePdfWithLlm] Failed to extract PDF text:`, pdfError);
   }
   
-  // Truncate text if too long (LLM has token limits)
-  // Increased limit to capture more vehicle details from documents
-  const maxTextLength = 20000;
-  const truncatedText = pdfText.length > maxTextLength 
-    ? pdfText.substring(0, maxTextLength) + "\n...[truncated]" 
-    : pdfText;
+  // No truncation - extract ALL text from PDF for comprehensive analysis
+  // Vehicle details could be anywhere in the document
+  const fullText = pdfText;
   
   // Use LLM to analyze the PDF content
   const classificationPrompt = `You are an expert insurance document analyzer for South African insurance companies.
@@ -1127,56 +1124,68 @@ Document filename: ${fileName}
 ${companyContext ? `Source: ${companyContext}` : ''}
 
 ${pdfText ? `--- PDF TEXT CONTENT ---
-${truncatedText}
+${fullText}
 --- END PDF TEXT ---` : '(No text could be extracted from this PDF - analyze based on filename only)'}
+
+=== CRITICAL: EXTRACT FROM ALL DOCUMENT TYPES ===
+
+**ALWAYS EXTRACT VEHICLE DETAILS FROM ANY DOCUMENT THAT CONTAINS THEM:**
+- VIN NUMBER / CHASSIS NUMBER (17 characters, no I, O, Q)
+  * Look for: "VIN", "Vin", "VIN No", "VIN Number", "Chassis", "Chassis No", "Chassis Number", "Vehicle ID"
+  * Also look for standalone 17-char alphanumeric sequences
+- REGISTRATION NUMBER (SA format: XX XX GP, XX-XX-GP, XXXXXX GP)
+  * Look for: "Reg", "Reg No", "Registration", "Vehicle Reg", "VRM"
+- VEHICLE MAKE (Toyota, VW, BMW, Mercedes, Ford, etc.)
+- VEHICLE MODEL (Corolla, Polo, X3, C-Class, Ranger, etc.)
+- VEHICLE YEAR (Year of Manufacture)
+- VEHICLE COLOR
+- ENGINE NUMBER (if present)
+- ODOMETER reading (if present)
+
+**DO NOT SKIP vehicle details extraction regardless of document type!**
 
 === DOCUMENT-TYPE-SPECIFIC EXTRACTION ===
 
 **IF THIS IS A QUOTATION:**
-- Extract VIN NUMBER (Vehicle Identification Number) or CHASSIS NUMBER - THIS IS CRITICAL
-  * Look for: "VIN", "Vin", "VIN No", "VIN Number", "Chassis", "Chassis No", "Chassis Number", "Vehicle ID"
-  * VINs are always 17 characters (letters and numbers, no I, O, Q)
-  * Example: MNJZK4AZ3LM123456
-- Extract REGISTRATION NUMBER - THIS IS CRITICAL
-  * Look for: "Reg", "Reg No", "Registration", "Vehicle Reg", "VRM"
-  * SA format: XX XX GP, XX-XX-GP, XXXXXX GP, or similar
-- Extract ALL vehicle details:
-  * MAKE (Toyota, VW, BMW, Mercedes, Ford, etc.)
-  * MODEL (Corolla, Polo, X3, C-Class, Ranger, etc.)
-  * YEAR or Year of Manufacture
-  * COLOR
-  * ENGINE NUMBER (if present)
-  * ODOMETER reading (if present)
+- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color, Engine)
 - Extract CLIENT/CUSTOMER name and contact details
 - Extract QUOTATION number, QUOTE date
-- Extract PREMIUM amount, EXCESS amount
-- Extract SUM INSURED / Insured Value
+- Extract PREMIUM amount, EXCESS amount, SUM INSURED
 - Extract any VEHICLE EXTRAS or ACCESSORIES listed
 
 **IF THIS IS A CLAIM FORM:**
+- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color, Engine)
 - Extract INCIDENT DATE (date of accident/event)
 - Extract INCIDENT LOCATION and DESCRIPTION
 - Extract DRIVER DETAILS if different from policy holder
 - Extract THIRD PARTY DETAILS if applicable
-- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color)
 
 **IF THIS IS A POLICY SCHEDULE:**
+- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color, Engine)
 - Extract SUM INSURED amount
 - Extract EXCESS amount
+- Extract PREMIUM amount
 - Extract VEHICLE EXTRAS / SPECIFIED ITEMS
 - Extract BENEFITS and EXTENSIONS
-- Extract PREMIUM amount
-- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color, Engine Number)
+
+**IF THIS IS AN INVOICE:**
+- Extract ALL vehicle details if present (VIN, Reg, Make, Model, Year)
+- Extract invoice number, date, amounts
 
 **IF THIS IS A POLICE REPORT:**
+- Extract ALL vehicle details involved (VIN, Reg, Make, Model, Year)
 - Extract CASE NUMBER (CAS number)
 - Extract incident date and location
-- Extract ALL vehicle details involved
 
 **IF THIS IS A VEHICLE ASSESSMENT or REPAIR QUOTE:**
-- Extract ALL vehicle identification (VIN, Reg, Make, Model, Year)
+- Extract ALL vehicle identification (VIN, Reg, Make, Model, Year, Engine)
 - Extract damage description
 - Extract repair costs/estimates
+
+**IF THIS IS CORRESPONDENCE or OTHER:**
+- Still extract ANY vehicle details found (VIN, Reg, Make, Model, Year)
+- Extract any claim or policy numbers
+- Extract sender/recipient information
 
 === CRITICAL EXTRACTION RULES ===
 1. VIN/CHASSIS NUMBERS: Must be exactly 17 alphanumeric characters (no I, O, Q)
