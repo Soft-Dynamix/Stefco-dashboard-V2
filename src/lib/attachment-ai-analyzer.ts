@@ -72,6 +72,100 @@ async function withRetry<T>(
   throw lastError;
 }
 
+/**
+ * Robust JSON parser that handles common LLM JSON issues
+ * - Trailing commas
+ * - Unquoted property names
+ * - Comments in JSON
+ * - Missing closing braces
+ */
+function parseJsonRobustly(text: string): unknown {
+  // First try direct parse
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Continue to more robust parsing
+  }
+
+  // Try to fix common issues
+  let cleaned = text;
+
+  // Remove JavaScript-style comments
+  cleaned = cleaned.replace(/\/\/.*$/gm, '');
+  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Remove trailing commas before } or ]
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+
+  // Try to fix unquoted property names
+  // This regex looks for property names that aren't quoted
+  cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+  // Try parsing again
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Continue to extraction
+  }
+
+  // Try to extract valid JSON object using balanced bracket counting
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) {
+    throw new Error('No JSON object found in response');
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let lastValidEnd = firstBrace;
+
+  for (let i = firstBrace; i < cleaned.length; i++) {
+    const char = cleaned[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') {
+      depth++;
+    } else if (char === '}') {
+      depth--;
+      if (depth === 0) {
+        lastValidEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  const extracted = cleaned.substring(firstBrace, lastValidEnd);
+
+  // Final attempt with cleaned extracted JSON
+  try {
+    return JSON.parse(extracted);
+  } catch (e) {
+    // Last resort: try fixing the extracted portion
+    const finalAttempt = extracted.replace(/,(\s*[}\]])/g, '$1');
+    try {
+      return JSON.parse(finalAttempt);
+    } catch {
+      throw new Error(`Failed to parse JSON: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+}
+
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -2307,13 +2401,21 @@ Respond in JSON format:
       }),
       { context: 'unified-analysis', maxRetries: 3, initialDelayMs: 2000 }
     );
-    
+
     const content = response.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const extractedData = parsed.extractedData || {};
+
+    // Use robust JSON parsing to handle malformed LLM responses
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseJsonRobustly(content) as Record<string, unknown>;
+    } catch (parseError) {
+      console.error("[unified-analysis] JSON parse error:", parseError);
+      console.error("[unified-analysis] Raw content (first 500 chars):", content.substring(0, 500));
+      throw new Error(`Failed to parse AI response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
+
+    if (parsed) {
+      const extractedData = (parsed.extractedData as Record<string, unknown>) || {};
       
       const result: UnifiedAnalysisResult = {
         classification: parsed.classification || "OTHER",

@@ -1673,13 +1673,16 @@ export function InboxSection() {
                                             throw new Error(result.error);
                                           }
                                         } catch (error) {
-                                          // Check for rate limiting
+                                          // Check for rate limiting or JSON parsing errors
                                           const errorMsg = String(error);
                                           const isRateLimited = errorMsg.includes('429') || errorMsg.includes('Too many requests') || errorMsg.includes('rate limit');
+                                          const isParseError = errorMsg.includes('parse') || errorMsg.includes('JSON') || errorMsg.includes('Expected');
                                           toast({
-                                            title: isRateLimited ? "Rate Limited" : "Analysis Failed",
+                                            title: isRateLimited ? "Rate Limited" : isParseError ? "Analysis Response Error" : "Analysis Failed",
                                             description: isRateLimited
                                               ? "API rate limit reached. Please wait a moment and try again."
+                                              : isParseError
+                                              ? "The AI returned an unexpected response. Please try again."
                                               : errorMsg,
                                             variant: "destructive",
                                           });
