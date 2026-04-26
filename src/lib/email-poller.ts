@@ -1,7 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { db } from "./db";
 import crypto from "crypto";
-import ZAI from "z-ai-web-dev-sdk";
 import { extractAttachmentMetadataFromSource } from "./attachment-extractor";
 
 interface ImapConfig {
@@ -550,6 +549,7 @@ export async function getPollingStatus(): Promise<{
 }
 
 // Auto-analyze pending emails using AI with learning hints
+// This is the MAIN analysis - runs UNIFIED analysis on email body + ALL attachments
 export async function autoAnalyzeEmails(limit: number = 50): Promise<{
   success: boolean;
   analyzed: number;
@@ -559,7 +559,6 @@ export async function autoAnalyzeEmails(limit: number = 50): Promise<{
   let analyzed = 0;
 
   try {
-    // Auto-analysis is enabled by default - no need to check database setting
     // Get pending emails
     const pendingEmails = await db.emailQueue.findMany({
       where: { status: "PENDING" },
@@ -571,311 +570,92 @@ export async function autoAnalyzeEmails(limit: number = 50): Promise<{
       return { success: true, analyzed: 0, errors: [] };
     }
 
-    const zai = await ZAI.create();
+    console.log(`[auto-analyze] Processing ${pendingEmails.length} pending emails with UNIFIED analysis`);
+
+    // Import the unified analyzer
+    const { performUnifiedAnalysis } = await import("./attachment-ai-analyzer");
 
     for (const email of pendingEmails) {
       try {
-        // Get learning hints for this sender domain
-        const learningHints = await db.learningPattern.findMany({
-          where: {
-            senderDomain: email.fromDomain || undefined,
-            isActive: true,
-          },
-          orderBy: { confidence: "desc" },
-          take: 10,
-        });
+        console.log(`[auto-analyze] Processing email: ${email.subject?.substring(0, 50)}...`);
 
-        const hintsText = learningHints.length > 0
-          ? learningHints.map(h => `- ${h.fieldName}: ${h.patternHint}`).join("\n")
-          : "No learning hints available for this sender.";
-
-        // Get sender pattern for automation level
-        const senderPattern = await db.senderPattern.findUnique({
-          where: { senderDomain: email.fromDomain || "" },
-        });
-
-        // Classification prompt
-        const classificationPrompt = `You are the Intake Agent for Stefco Consultants Insurance Claims.
-
-Your job is to determine if an incoming email is a NEW CLAIM APPOINTMENT.
-
-You must be strict and avoid false positives.
-
-Classify into one of:
-- NEW_CLAIM: Email indicates a new claim assessment/appointment request
-- IGNORE: Spam, marketing, out-of-office, or irrelevant email
-- MISSING_INFO: Email seems related to claims but lacks essential information
-- OTHER: Unclear or miscellaneous email
-
-Indicators of NEW_CLAIM:
-- "New assessment", "New appointment", "NUWE EIS" (Afrikaans)
-- "You are appointed" or similar
-- Attachments related to claims
-- Insurance company correspondence about new matters
-- Vehicle/property incident details
-
-Rules:
-- Only mark NEW_CLAIM if there is clear evidence of a claim appointment
-- If unsure, return OTHER
-- Ignore spam, replies, follow-ups, marketing
-
-Analyze the following email and respond with ONLY valid JSON:
-
-Subject: ${email.subject || "(No Subject)"}
-From: ${email.from || "Unknown"}
-Body:
-${(email.bodyText || "").substring(0, 4000)}
-
-Respond with this exact JSON structure (no markdown, no explanation):
-{"classification": "NEW_CLAIM|IGNORE|MISSING_INFO|OTHER", "confidence": 0-100, "reasoning": "brief explanation"}`;
-
-        const classificationResponse = await zai.chat.completions.create({
-          messages: [{ role: "user", content: classificationPrompt }],
-        });
-
-        let classification;
-        try {
-          const responseText = classificationResponse.choices?.[0]?.message?.content || "";
-          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            classification = JSON.parse(jsonMatch[0]);
-          } else {
-            classification = {
-              classification: "OTHER",
-              confidence: 50,
-              reasoning: "Failed to parse AI response",
-            };
-          }
-        } catch {
-          classification = {
-            classification: "OTHER",
-            confidence: 50,
-            reasoning: "Failed to parse AI response",
-          };
-        }
-
-        // Extraction (only for NEW_CLAIM)
-        let extraction = null;
-        let decision = null;
-
-        if (classification.classification === "NEW_CLAIM") {
-          const extractionPrompt = `You are the Data Extraction Agent for Stefco Consultants Insurance Claims.
-
-Extract structured claim data from the email. Be precise and do not guess.
-
-Rules:
-- NEVER guess missing data - use null for uncertain fields
-- If multiple claim numbers are mentioned, select the most prominent one
-- Extract dates in ISO format if possible
-- Identify the primary contact person
-
-Extract the following fields:
-- claimNumber: The main claim reference number
-- clientName: Full name of the client/claimant
-- clientEmail: Client email address
-- clientPhone: Client phone number
-- claimType: MOTOR, PROPERTY, LIABILITY, THEFT, FIRE, or OTHER
-- incidentDate: Date of incident (ISO format)
-- incidentDescription: Brief description of the incident
-- vehicleRegistration: Vehicle registration number (if applicable)
-- vehicleMake: Vehicle make (if applicable)
-- vehicleModel: Vehicle model (if applicable)
-- propertyAddress: Property address (if applicable)
-- excessAmount: Excess amount as a number
-- insuranceCompany: Name of the insurance company
-
-Analyze the following email and respond with ONLY valid JSON:
-
-Subject: ${email.subject || "(No Subject)"}
-From: ${email.from || "Unknown"}
-Body:
-${(email.bodyText || "").substring(0, 4000)}
-
-Learning hints (use these to improve extraction):
-${hintsText}
-
-Respond with this exact JSON structure (no markdown, no explanation):
-{"claimNumber": null, "clientName": null, "clientEmail": null, "clientPhone": null, "claimType": null, "incidentDate": null, "incidentDescription": null, "vehicleRegistration": null, "vehicleMake": null, "vehicleModel": null, "propertyAddress": null, "excessAmount": null, "insuranceCompany": null, "confidenceOverall": 0-100, "missingFields": []}`;
-
-          const extractionResponse = await zai.chat.completions.create({
-            messages: [{ role: "user", content: extractionPrompt }],
-          });
-
-          try {
-            const responseText = extractionResponse.choices?.[0]?.message?.content || "";
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              extraction = JSON.parse(jsonMatch[0]);
-            }
-          } catch {
-            extraction = null;
-          }
-
-          // Decision
-          if (extraction) {
-            const decisionPrompt = `You are the Claims Supervisor AI for Stefco Consultants.
-
-You decide whether a claim can be processed automatically.
-
-CRITICAL RULES:
-- NEVER allow processing if claim_number is missing or low confidence
-- NEVER allow processing if duplicate risk exists
-- NEVER guess or assume
-- If confidence is low, send to review
-
-Decision thresholds:
-- claimNumber confidence < 70% → REVIEW
-- overall confidence < 70% → REVIEW
-- missing critical fields → REVIEW
-
-Possible decisions:
-- PROCEED: High confidence, all critical fields present
-- REVIEW: Medium confidence or missing fields
-- REJECT: Clearly not a claim or invalid
-
-Analyze the extraction results and respond with ONLY valid JSON:
-
-Extraction results:
-${JSON.stringify(extraction, null, 2)}
-
-Classification:
-${JSON.stringify(classification, null, 2)}
-
-Respond with this exact JSON structure (no markdown, no explanation):
-{"decision": "PROCEED|REVIEW|REJECT", "confidence": 0-100, "riskFlags": [], "reason": "explanation", "nextAction": "recommended action"}`;
-
-            const decisionResponse = await zai.chat.completions.create({
-              messages: [{ role: "user", content: decisionPrompt }],
-            });
-
-            try {
-              const responseText = decisionResponse.choices?.[0]?.message?.content || "";
-              const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                decision = JSON.parse(jsonMatch[0]);
-              }
-            } catch {
-              decision = {
-                decision: "REVIEW",
-                confidence: 50,
-                riskFlags: ["AI parsing failed"],
-                reason: "Failed to parse decision response",
-                nextAction: "SEND_TO_REVIEW_QUEUE",
-              };
-            }
-          }
-        }
-
-        // Attachment Analysis: Check if email has attachments and analyze them
-        let attachmentSummary = null;
+        // Parse attachments if any
+        let attachments: Array<{
+          filename: string;
+          mimeType?: string;
+          size?: number;
+          contentBase64?: string;
+        }> = [];
+        
         if (email.attachments) {
           try {
-            const attachmentsData = JSON.parse(email.attachments);
-            if (Array.isArray(attachmentsData) && attachmentsData.length > 0) {
-              // Import attachment analyzer dynamically to avoid circular dependencies
-              const { analyzeAllAttachments } = await import("./attachment-ai-analyzer");
-              
-              // Prepare attachments for analysis (attachments from IMAP don't have content yet)
-              // We'll create a placeholder for now - actual content analysis happens on demand
-              const attachmentsForAnalysis = attachmentsData.map((att: { filename: string; contentType?: string; size?: number }) => ({
+            const parsed = JSON.parse(email.attachments);
+            if (Array.isArray(parsed)) {
+              attachments = parsed.map((att: { filename: string; contentType?: string; size?: number; contentBase64?: string }) => ({
                 filename: att.filename,
                 mimeType: att.contentType,
                 size: att.size,
-                content: undefined, // Content will be fetched on-demand
+                contentBase64: att.contentBase64,
               }));
-              
-              // Store attachment metadata for later analysis
-              await db.emailAttachmentSummary.upsert({
-                where: { emailQueueId: email.id },
-                create: {
-                  emailQueueId: email.id,
-                  totalAttachments: attachmentsData.length,
-                  claimRelatedAttachments: 0,
-                  hasClaimForm: false,
-                  hasPolicySchedule: false,
-                  hasSupportingDocuments: false,
-                  overallClaimLikelihood: 0,
-                  isLikelyNewClaim: false,
-                  confidenceLevel: "LOW",
-                  assessmentReason: "Attachments detected - click 'Analyze Attachments' to process",
-                  keyIndicators: JSON.stringify(attachmentsData.map((a: { filename: string }) => a.filename)),
-                  missingInformation: JSON.stringify(["Attachment content not yet analyzed"]),
-                },
-                update: {
-                  totalAttachments: attachmentsData.length,
-                  assessmentReason: "Attachments detected - click 'Analyze Attachments' to process",
-                  keyIndicators: JSON.stringify(attachmentsData.map((a: { filename: string }) => a.filename)),
-                },
-              });
-              
-              // Check if attachment names suggest a claim
-              const attachmentNames = attachmentsData.map((a: { filename: string }) => a.filename.toLowerCase());
-              const hasClaimIndicators = attachmentNames.some((name: string) => 
-                name.includes('claim') || 
-                name.includes('policy') || 
-                name.includes('schedule') ||
-                name.includes('form') ||
-                name.includes('incident') ||
-                name.includes('accident')
-              );
-              
-              // If attachment names suggest claim and AI wasn't sure, boost confidence
-              if (hasClaimIndicators && classification.classification === "OTHER") {
-                classification.confidence = Math.min(100, classification.confidence + 15);
-                classification.reasoning += " (Attachments with claim-related filenames detected)";
-              }
-              
-              // If attachment names suggest claim and classification is NEW_CLAIM, boost confidence
-              if (hasClaimIndicators && classification.classification === "NEW_CLAIM") {
-                classification.confidence = Math.min(100, classification.confidence + 10);
-                classification.reasoning += " (Supporting attachments detected)";
-              }
             }
-          } catch (attError) {
-            console.error("Attachment analysis error:", attError);
-            // Don't fail the whole email processing if attachment analysis fails
+          } catch (e) {
+            console.log(`[auto-analyze] Could not parse attachments for email ${email.id}`);
           }
         }
 
-        // Update email queue
-        // If AI classifies as IGNORE, automatically set status to IGNORED
-        const newStatus = classification.classification === "IGNORE" ? "IGNORED" : "AI_ANALYZED";
-        
+        // Run UNIFIED analysis - this analyzes email body + ALL attachments together
+        const unifiedResult = await performUnifiedAnalysis(
+          email.id,
+          {
+            subject: email.subject,
+            from: email.from,
+            bodyText: email.bodyText,
+          },
+          attachments,
+          email.fromDomain || undefined
+        );
+
+        console.log(`[auto-analyze] Result: ${unifiedResult.classification} (${unifiedResult.confidence}% confidence)`);
+        console.log(`[auto-analyze] Key indicators: ${unifiedResult.keyIndicators.slice(0, 3).join(', ')}...`);
+
+        // Determine new status
+        const newStatus = unifiedResult.classification === "IGNORE" ? "IGNORED" : "AI_ANALYZED";
+
+        // Update email queue with unified results
         await db.emailQueue.update({
           where: { id: email.id },
           data: {
-            aiClassification: classification.classification,
-            aiConfidence: classification.confidence,
-            aiReasoning: classification.reasoning,
-            aiExtractedData: extraction ? JSON.stringify(extraction) : null,
+            aiClassification: unifiedResult.classification,
+            aiConfidence: unifiedResult.confidence,
+            aiReasoning: unifiedResult.reasoning,
+            aiExtractedData: JSON.stringify(unifiedResult.extractedData),
             status: newStatus,
-            ignoreReason: classification.classification === "IGNORE" ? classification.reasoning : null,
-            ignoreCategory: classification.classification === "IGNORE" ? "ai_classified" : null,
-            processedAt: classification.classification === "IGNORE" ? new Date() : null,
-            learningHintsCount: learningHints.length,
+            ignoreReason: unifiedResult.classification === "IGNORE" ? unifiedResult.reasoning : null,
+            ignoreCategory: unifiedResult.classification === "IGNORE" ? "ai_classified" : null,
+            processedAt: unifiedResult.classification === "IGNORE" ? new Date() : null,
           },
         });
 
-        // Create prediction record
+        // Create prediction record for learning
         await db.prediction.create({
           data: {
             emailQueueId: email.id,
-            predictedClass: classification.classification,
-            confidence: classification.confidence,
-            reasoning: classification.reasoning,
-            decision: decision?.decision,
-            extractedFields: extraction ? JSON.stringify(extraction) : null,
-            learningHintsCount: learningHints.length,
+            predictedClass: unifiedResult.classification,
+            confidence: unifiedResult.confidence,
+            reasoning: unifiedResult.reasoning,
+            decision: unifiedResult.recommendedAction,
+            extractedFields: JSON.stringify(unifiedResult.extractedData),
           },
         });
 
         analyzed++;
-        
-        // Add delay between AI calls to avoid rate limiting (2 seconds)
+
+        // Add delay between emails to avoid rate limiting
         if (analyzed < pendingEmails.length) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       } catch (emailError) {
+        console.error(`[auto-analyze] Failed to analyze email ${email.id}:`, emailError);
         errors.push(`Failed to analyze email ${email.id}: ${emailError}`);
       }
     }
@@ -883,7 +663,7 @@ Respond with this exact JSON structure (no markdown, no explanation):
     // Create audit log
     await db.auditLog.create({
       data: {
-        action: "auto_analysis_completed",
+        action: "unified_auto_analysis_completed",
         entityType: "system",
         details: JSON.stringify({ analyzed, errors: errors.length }),
         status: errors.length > 0 ? "WARNING" : "SUCCESS",
@@ -891,8 +671,10 @@ Respond with this exact JSON structure (no markdown, no explanation):
       },
     });
 
+    console.log(`[auto-analyze] Completed: ${analyzed} emails analyzed, ${errors.length} errors`);
     return { success: true, analyzed, errors };
   } catch (error) {
+    console.error("[auto-analyze] Fatal error:", error);
     errors.push(`Auto-analysis failed: ${error}`);
     return { success: false, analyzed, errors };
   }

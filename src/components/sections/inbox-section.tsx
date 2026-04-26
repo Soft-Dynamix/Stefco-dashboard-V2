@@ -1401,6 +1401,9 @@ export function InboxSection() {
                                   <div className="flex items-center justify-between mb-4">
                                     <div className="text-sm text-muted-foreground">
                                       {attachments.length} attachment{attachments.length > 1 ? 's' : ''} found
+                                      {selectedEmail.status === 'AI_ANALYZED' && (
+                                        <span className="ml-2 text-green-600">(auto-analyzed)</span>
+                                      )}
                                     </div>
                                     <Button
                                       variant="outline"
@@ -1428,7 +1431,7 @@ export function InboxSection() {
                                           const result = await response.json();
                                           if (result.success) {
                                             toast({
-                                              title: "Unified Analysis Complete",
+                                              title: "Re-analysis Complete",
                                               description: `Analyzed email body + ${result.unifiedAnalysis?.documentsAnalyzed?.attachments?.length || 0} documents. Found ${result.unifiedAnalysis?.keyIndicators?.length || 0} key indicators. Claim likelihood: ${result.unifiedAnalysis?.overallClaimLikelihood || 0}%`,
                                             });
                                             // Refresh the analysis display
@@ -1448,7 +1451,7 @@ export function InboxSection() {
                                       }}
                                     >
                                       <FileSearch className="h-4 w-4" />
-                                      {isLoadingAnalysis ? "Analyzing..." : "Analyze Everything"}
+                                      {isLoadingAnalysis ? "Analyzing..." : "Re-analyze"}
                                     </Button>
                                   </div>
                                   
