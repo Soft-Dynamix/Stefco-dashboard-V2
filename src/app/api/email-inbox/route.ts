@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
     if (status && status !== "all") {
       where.status = status;
     } else if (!status || status === "all") {
-      // Exclude archived emails from "All Statuses" view
-      where.status = { not: "ARCHIVED" };
+      // Exclude archived and ignored emails from "All Statuses" view
+      where.status = { notIn: ["ARCHIVED", "IGNORED"] };
     }
 
     const [emails, total] = await Promise.all([

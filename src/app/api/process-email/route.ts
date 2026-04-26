@@ -224,6 +224,9 @@ export async function POST(request: NextRequest) {
 
     // Update email queue if emailId provided
     if (emailId) {
+      // If AI classifies as IGNORE, automatically set status to IGNORED
+      const newStatus = classification.classification === "IGNORE" ? "IGNORED" : "AI_ANALYZED";
+      
       await db.emailQueue.update({
         where: { id: emailId },
         data: {
@@ -231,7 +234,10 @@ export async function POST(request: NextRequest) {
           aiConfidence: classification.confidence,
           aiReasoning: classification.reasoning,
           aiExtractedData: extraction ? JSON.stringify(extraction) : null,
-          status: "AI_ANALYZED",
+          status: newStatus,
+          ignoreReason: classification.classification === "IGNORE" ? classification.reasoning : null,
+          ignoreCategory: classification.classification === "IGNORE" ? "ai_classified" : null,
+          processedAt: classification.classification === "IGNORE" ? new Date() : null,
           learningHintsCount: learningHints.length,
         },
       });
