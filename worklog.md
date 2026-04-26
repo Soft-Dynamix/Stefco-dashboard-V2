@@ -161,3 +161,33 @@ Stage Summary:
 - Dev server running correctly
 
 ---
+Task ID: 6
+Agent: Main Agent
+Task: Add delete email function for repolling with fresh attachment content
+
+Work Log:
+- Added DELETE endpoint to `/api/email-inbox/route.ts`:
+  - Supports single email deletion (`emailId`) and bulk deletion (`emailIds` array)
+  - Deletes related records first (predictions, attachment analyses, attachment data, extracted entities)
+  - Creates audit log entry for deletion
+- Added `deleteEmail()` function to `inbox-section.tsx`:
+  - Shows confirmation dialog explaining repoll workflow
+  - Deletes email and shows toast notification
+- Added "Delete & Repoll" button in email detail view:
+  - Located in tertiary actions section
+  - Red styling to indicate destructive action
+- Added bulk delete functionality:
+  - `bulkDelete()` function for deleting multiple selected emails
+  - Added `isBulkDeleting` state
+  - "Delete Selected" button in bulk action bar
+  - Red styling to distinguish from other bulk actions
+
+Stage Summary:
+- Users can now delete emails that were fetched before the attachment content fix
+- After deletion, clicking "Poll Emails" will re-fetch the emails with fresh attachment content
+- Both single email deletion and bulk deletion supported
+- Confirmation dialogs prevent accidental deletion
+- Lint check passes (1 pre-existing warning)
+- Dev server running correctly
+
+---

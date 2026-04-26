@@ -123,6 +123,7 @@ export function InboxSection() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showHtmlView, setShowHtmlView] = useState(true);
   const [isRefetchingAttachments, setIsRefetchingAttachments] = useState(false);
   const [attachmentStats, setAttachmentStats] = useState<{
@@ -688,6 +689,39 @@ export function InboxSection() {
     }
   };
 
+  // Delete email
+  const deleteEmail = async (emailId: string) => {
+    if (!confirm("Are you sure you want to delete this email? You can repoll it afterwards to get fresh attachment content.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/email-inbox", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast({
+          title: "Email Deleted",
+          description: "Email deleted. Use 'Poll Emails' to fetch it again with fresh attachment content.",
+        });
+        fetchEmails(pagination.page);
+        setDetailsOpen(false);
+      } else {
+        throw new Error("Failed to delete email");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete email",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Preview attachment
   const previewAttachmentFile = async (emailId: string, filename: string) => {
     try {
@@ -932,6 +966,52 @@ export function InboxSection() {
       });
     } finally {
       setIsBulkArchiving(false);
+    }
+  };
+
+  // Bulk delete selected emails
+  const bulkDelete = async () => {
+    if (selectedEmailIds.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedEmailIds.size} email(s)? You can repoll them afterwards to get fresh attachment content.`)) {
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    toast({
+      title: "Bulk delete started",
+      description: `Deleting ${selectedEmailIds.size} emails...`,
+    });
+
+    try {
+      const res = await fetch("/api/email-inbox", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailIds: Array.from(selectedEmailIds),
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        toast({
+          title: "Emails Deleted",
+          description: `Successfully deleted ${json.deleted} emails. Use 'Poll Emails' to fetch them again with fresh attachment content.`,
+        });
+        setSelectedEmailIds(new Set());
+        fetchEmails(pagination.page);
+      } else {
+        throw new Error(json.error || "Failed to delete emails");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete emails",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -1210,6 +1290,20 @@ export function InboxSection() {
                     Unarchive Selected
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={bulkDelete}
+                  disabled={isBulkDeleting}
+                >
+                  {isBulkDeleting ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete Selected
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -1950,6 +2044,18 @@ export function InboxSection() {
                           <span className="text-sm">Archive</span>
                         </Button>
                       )}
+                    </div>
+                    
+                    {/* Tertiary Actions - Delete */}
+                    <div className="flex justify-center">
+                      <Button 
+                        variant="ghost" 
+                        className="py-3 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => deleteEmail(selectedEmail.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span className="text-sm">Delete & Repoll</span>
+                      </Button>
                     </div>
                   </TabsContent>
                 </div>
