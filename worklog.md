@@ -1441,3 +1441,72 @@ PDF Analysis Now Extracts:
 - Key dates
 - Incident details
 
+
+
+---
+Task ID: 51
+Agent: Main Agent
+Task: Enhance AI Analysis with Document-Type-Specific Extraction
+
+Work Log:
+- User feedback: AI was not using all document information effectively
+- Key insight: Different documents contain different types of information:
+  - QUOTATION: VIN number, registration number (for vehicle identification)
+  - CLAIM FORM: Incident date, claim details, driver info, third party info
+  - POLICY SCHEDULE: Sum insured, excess, vehicle extras/specifications
+- Enhanced unified analysis prompt with document-specific extraction guidance
+- Added "DOCUMENT-SPECIFIC EXTRACTION GUIDANCE" section to prompt
+- Added "CRITICAL EXTRACTION RULES" section with:
+  - Motor claims specific instructions
+  - Cross-document reference rules
+  - Data extraction priority (which document to check first for each field)
+- Updated PDF analysis prompt to include document-type-specific extraction:
+  - Quotation: VIN, registration, vehicle details
+  - Claim Form: Incident date/time, driver details, third party
+  - Policy Schedule: Sum insured, excess, benefits, extensions, specified items
+  - Police Report: Case number, incident details
+- Added new fields to extraction:
+  - VIN number (17-character vehicle identification)
+  - Driver info (name, ID number)
+  - Third party info (name, vehicle reg)
+  - Benefits, extensions, specified items arrays
+  - Police case number
+  - Incident time
+- Updated UnifiedAnalysisResult interface with new fields
+- Updated both claim and policy data building to include new fields
+
+Stage Summary:
+- AI analysis now understands document types and extracts appropriate information
+- Cross-document references enabled (VIN from quotation matches policy schedule)
+- Motor claims handled with proper vehicle identification flow
+- All claim-related information properly extracted from relevant documents
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts - Enhanced prompts and data structures
+
+Key Changes:
+1. Unified Analysis Prompt:
+   - Added document-type-specific hints for each attachment
+   - Added motor claims extraction rules
+   - Added data extraction priority rules
+   
+2. PDF Analysis Prompt:
+   - Added document-type-specific extraction instructions
+   - Added VIN number format (17 characters)
+   - Added driver and third party fields
+   - Added benefits/extensions/specItems arrays
+
+3. Data Structures:
+   - UnifiedAnalysisResult: Added driver, thirdParty, benefits, extensions, specifiedItems, policeCaseNumber
+   - ClaimFormData: Added incidentTime, vehicleColor, vehicleVinNumber, driver fields, third party fields
+   - PolicyScheduleData: Added vehicleColor, vehicleVinNumber, benefits, extensions arrays
+
+4. Parsing Logic:
+   - Updated to handle QUOTATION documents alongside POLICY_SCHEDULE
+   - Added all new field mappings from findings to data structures
+
+Data Extraction Priority (for Motor Claims):
+1. VIN/Registration: QUOTATION → POLICY_SCHEDULE → CLAIM_FORM
+2. Incident Details: CLAIM_FORM → email body
+3. Sum Insured/Excess: POLICY_SCHEDULE only
+4. Client Details: All documents, prefer POLICY_SCHEDULE for insured info

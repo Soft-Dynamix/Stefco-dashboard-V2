@@ -1127,15 +1127,40 @@ ${pdfText ? `--- PDF TEXT CONTENT ---
 ${truncatedText}
 --- END PDF TEXT ---` : '(No text could be extracted from this PDF - analyze based on filename only)'}
 
+=== DOCUMENT-TYPE-SPECIFIC EXTRACTION ===
+
+**IF THIS IS A QUOTATION:**
+- Extract VIN NUMBER (Vehicle Identification Number) - critical for matching vehicle
+- Extract REGISTRATION NUMBER - identifies the vehicle on policy
+- Extract vehicle details: make, model, year, color
+
+**IF THIS IS A CLAIM FORM:**
+- Extract INCIDENT DATE (date of accident/event)
+- Extract INCIDENT LOCATION and DESCRIPTION
+- Extract DRIVER DETAILS if different from policy holder
+- Extract THIRD PARTY DETAILS if applicable
+
+**IF THIS IS A POLICY SCHEDULE:**
+- Extract SUM INSURED amount
+- Extract EXCESS amount
+- Extract VEHICLE EXTRAS / SPECIFIED ITEMS
+- Extract BENEFITS and EXTENSIONS
+- Extract PREMIUM amount
+
+**IF THIS IS A POLICE REPORT:**
+- Extract CASE NUMBER (CAS number)
+- Extract incident date and location
+
 Your tasks:
 1. Classify the document type
-2. Extract ALL key information you find
+2. Extract ALL key information based on document type
 3. Look for South African formats:
    - Vehicle registrations: XX XX GP, XX-XX-GP format
    - Phone numbers: +27 or 0 prefix (082 123 4567)
    - ID numbers: 13-digit SA ID format
    - Claim numbers: Various formats (STM-YYYY-NNNNN, OUT/NNNNNN/YY, etc.)
    - Policy numbers: Company-specific formats
+   - VIN numbers: 17-character vehicle identification numbers
 
 Respond in JSON format:
 {
@@ -1148,23 +1173,34 @@ Respond in JSON format:
     "claimNumber": "found or null",
     "policyNumber": "found or null",
     "vehicleRegistration": "found or null",
+    "vehicleVinNumber": "17-char VIN or null",
     "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
     "incidentDate": "YYYY-MM-DD or null",
+    "incidentTime": "HH:MM or null",
     "incidentLocation": "found or null",
     "incidentDescription": "brief description or null",
     "policyHolderName": "found or null",
     "policyHolderIdNumber": "found or null",
     "policyHolderPhone": "found or null",
     "policyHolderEmail": "found or null",
+    "driverName": "if different from policy holder or null",
+    "driverIdNumber": "found or null",
+    "thirdPartyName": "found or null",
+    "thirdPartyVehicleReg": "found or null",
     "vehicleMake": "found or null",
     "vehicleModel": "found or null",
     "vehicleYear": "found or null",
+    "vehicleColor": "found or null",
     "insuredName": "found or null",
     "sumInsured": number or null,
     "excess": number or null,
     "premium": number or null,
+    "benefits": ["list of benefits"],
+    "extensions": ["list of extensions"],
+    "specifiedItems": ["list of specified/extras items"],
     "inceptionDate": "YYYY-MM-DD or null",
-    "expiryDate": "YYYY-MM-DD or null"
+    "expiryDate": "YYYY-MM-DD or null",
+    "policeCaseNumber": "CAS number or null"
   },
   "extractedText": "key text snippets from the document",
   "allNumbersFound": ["list of all claim/policy/reference numbers found"]
@@ -1209,6 +1245,7 @@ Respond in JSON format:
           policyNumber: findings.policyNumber || null,
           claimType: findings.claimType || null,
           incidentDate: findings.incidentDate || null,
+          incidentTime: findings.incidentTime || null,
           incidentLocation: findings.incidentLocation || null,
           incidentDescription: findings.incidentDescription || null,
           policyHolderName: findings.policyHolderName || null,
@@ -1219,12 +1256,18 @@ Respond in JSON format:
           vehicleMake: findings.vehicleMake || null,
           vehicleModel: findings.vehicleModel || null,
           vehicleYear: findings.vehicleYear || null,
+          vehicleColor: findings.vehicleColor || null,
+          vehicleVinNumber: findings.vehicleVinNumber || null,
+          driverName: findings.driverName || null,
+          driverIdNumber: findings.driverIdNumber || null,
+          thirdPartyName: findings.thirdPartyName || null,
+          thirdPartyVehicleReg: findings.thirdPartyVehicleReg || null,
           extractionConfidence: classification.confidence,
           extractedFields: Object.keys(findings).filter(k => findings[k] !== null && findings[k] !== undefined)
         };
       }
       
-      if (classification.documentType === "POLICY_SCHEDULE" || (findings.policyNumber && !findings.claimNumber)) {
+      if (classification.documentType === "POLICY_SCHEDULE" || classification.documentType === "QUOTATION" || (findings.policyNumber && !findings.claimNumber)) {
         policyData = {
           ...getEmptyPolicyScheduleData(),
           policyNumber: findings.policyNumber || null,
@@ -1233,9 +1276,13 @@ Respond in JSON format:
           vehicleMake: findings.vehicleMake || null,
           vehicleModel: findings.vehicleModel || null,
           vehicleYear: findings.vehicleYear ? parseInt(findings.vehicleYear) : null,
+          vehicleColor: findings.vehicleColor || null,
+          vehicleVinNumber: findings.vehicleVinNumber || null,
           sumInsured: findings.sumInsured || null,
           excess: findings.excess || null,
           premium: findings.premium || null,
+          benefits: findings.benefits || [],
+          extensions: findings.extensions || [],
           inceptionDate: findings.inceptionDate || null,
           expiryDate: findings.expiryDate || null,
           extractionConfidence: classification.confidence,
@@ -1667,10 +1714,24 @@ export interface UnifiedAnalysisResult {
     vehicleColor: string | null;
     vehicleVinNumber: string | null;
     
+    // Driver info (if different from policy holder)
+    driverName: string | null;
+    driverIdNumber: string | null;
+    
+    // Third party info
+    thirdPartyName: string | null;
+    thirdPartyVehicleReg: string | null;
+    
     // Financial info
     excessAmount: number | null;
     estimatedDamage: number | null;
     sumInsured: number | null;
+    premium: number | null;
+    
+    // Policy extras
+    benefits: string[];
+    extensions: string[];
+    specifiedItems: string[];
     
     // Insurance company
     insuranceCompany: string | null;
@@ -1678,6 +1739,9 @@ export interface UnifiedAnalysisResult {
     // Policy dates
     policyInceptionDate: string | null;
     policyExpiryDate: string | null;
+    
+    // Police report
+    policeCaseNumber: string | null;
   };
   
   // Source tracking - where each piece of data came from
@@ -1766,6 +1830,27 @@ export async function performUnifiedAnalysis(
   const combinedClaimData = combineClaimFormData(attachmentResults);
   const combinedPolicyData = combinePolicyScheduleData(attachmentResults);
   
+  // Build document-type-specific extraction hints
+  const documentTypeHints = attachmentResults.map(r => {
+    const hints: string[] = [];
+    const docType = r.classification.documentType;
+    
+    if (docType === "QUOTATION") {
+      hints.push("QUOTATION: Extract VIN NUMBER and REGISTRATION NUMBER - these identify the correct vehicle on the policy schedule");
+      hints.push("Look for: vehicle details, make, model, year, VIN, registration number");
+    } else if (docType === "CLAIM_FORM") {
+      hints.push("CLAIM FORM: Extract INCIDENT DATE, claim details, driver info, third party info");
+      hints.push("Look for: incident date/time/location, description of event, driver details, third party details");
+    } else if (docType === "POLICY_SCHEDULE") {
+      hints.push("POLICY SCHEDULE: Extract SUM INSURED, COVERAGE DETAILS, VEHICLE EXTRAS");
+      hints.push("Look for: sum insured amount, excess, premium, benefits, extensions, specified items");
+    } else if (docType === "POLICE_REPORT") {
+      hints.push("POLICE REPORT: Extract CASE NUMBER, incident details, parties involved");
+    }
+    
+    return `${r.fileName} (${docType}): ${hints.join('. ')}`;
+  }).join('\n');
+
   const unifiedPrompt = `You are the Unified Claims Analysis AI for STEFCO Consultants.
 
 Analyze ALL available information from this email and its attachments to produce ONE comprehensive assessment.
@@ -1779,6 +1864,9 @@ ${(emailData.bodyText || '').substring(0, 4000)}
 === ATTACHMENTS (${attachments.length} files) ===
 ${attachmentSummary || '(No attachments)'}
 
+=== DOCUMENT-SPECIFIC EXTRACTION GUIDANCE ===
+${documentTypeHints || 'No specific guidance available'}
+
 === PRE-EXTRACTED DATA FROM ATTACHMENTS ===
 Claim Data: ${JSON.stringify(combinedClaimData, null, 2)}
 Policy Data: ${JSON.stringify(combinedPolicyData, null, 2)}
@@ -1791,12 +1879,26 @@ Analyze ALL the above information and extract:
 4. Identify key indicators found
 5. List missing critical information
 
-Rules:
-- Cross-reference data between email body and attachments
+=== CRITICAL EXTRACTION RULES ===
+
+**FOR MOTOR CLAIMS:**
+1. QUOTATION documents contain VIN NUMBER and REGISTRATION NUMBER - use these to match/verify the vehicle
+2. CLAIM FORM documents contain INCIDENT DATE and claim-specific details
+3. POLICY SCHEDULE documents contain SUM INSURED, EXCESS, and VEHICLE EXTRAS/SPECIFIED ITEMS
+4. Cross-reference: If quotation has VIN/reg, verify it matches the policy schedule vehicle
+
+**FOR ALL CLAIMS:**
+- Cross-reference data between email body and ALL attachments
 - If email body mentions a claim number but attachment has more details, combine them
 - If there are conflicts, prefer attachment data for claim details
 - Be thorough - check ALL attachments for relevant information
-- South African formats: vehicle reg (XX XX GP), phone (+27/0 prefix), ID (13 digits)
+- South African formats: vehicle reg (XX XX GP, XX-XX-GP), phone (+27/0 prefix), ID (13 digits)
+
+**DATA EXTRACTION PRIORITY:**
+1. VIN/Registration: Check QUOTATION first, then POLICY_SCHEDULE, then CLAIM_FORM
+2. Incident Details: Check CLAIM_FORM first, then email body
+3. Sum Insured/Excess: Check POLICY_SCHEDULE only
+4. Client Details: Check all documents, prefer POLICY_SCHEDULE for insured info
 
 Respond in JSON format:
 {
@@ -1808,6 +1910,7 @@ Respond in JSON format:
     "policyNumber": "from email or attachment or null",
     "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
     "incidentDate": "YYYY-MM-DD or null",
+    "incidentTime": "HH:MM or null",
     "incidentLocation": "location or null",
     "incidentDescription": "description from any source or null",
     "clientName": "name from email or attachment or null",
@@ -1820,19 +1923,29 @@ Respond in JSON format:
     "vehicleModel": "model or null",
     "vehicleYear": "year or null",
     "vehicleColor": "color or null",
-    "vehicleVinNumber": "VIN or null",
+    "vehicleVinNumber": "17-char VIN or null",
+    "driverName": "if different from policy holder or null",
+    "driverIdNumber": "SA ID or null",
+    "thirdPartyName": "third party name or null",
+    "thirdPartyVehicleReg": "third party vehicle reg or null",
     "excessAmount": number or null,
     "estimatedDamage": number or null,
     "sumInsured": number or null,
+    "premium": number or null,
+    "benefits": ["list of benefits from policy schedule"],
+    "extensions": ["list of extensions from policy schedule"],
+    "specifiedItems": ["list of specified/extras items from policy schedule"],
     "insuranceCompany": "company name or null",
     "policyInceptionDate": "YYYY-MM-DD or null",
-    "policyExpiryDate": "YYYY-MM-DD or null"
+    "policyExpiryDate": "YYYY-MM-DD or null",
+    "policeCaseNumber": "CAS number or null"
   },
   "dataSources": {
     "claimNumber": "email_body|attachment|null",
     "policyNumber": "email_body|attachment|null",
     "clientName": "email_body|attachment|null",
-    "vehicleRegistration": "email_body|attachment|null"
+    "vehicleRegistration": "email_body|attachment|null",
+    "vehicleVinNumber": "email_body|attachment|null"
   },
   "keyIndicators": ["list of all claim indicators found"],
   "missingInformation": ["list of critical missing info"],
