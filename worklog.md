@@ -56,3 +56,46 @@ Stage Summary:
 - Lint check passes (only 1 minor warning about alt prop)
 
 ---
+Task ID: 3
+Agent: Main Agent
+Task: Final comprehensive fix for vehicle details extraction and VIN/Chassis extraction
+
+Work Log:
+- Updated `attachment-processor.ts`:
+  - Added `vehicleYear`, `vehicleColor`, `vehicleVinNumber`, `engineNumber` fields to `ExtractedAttachmentData` interface
+  - Updated `buildExtractionPrompt` to emphasize VIN/Chassis extraction with detailed rules
+  - Updated `parseVLMResponse` to parse new vehicle fields
+  - Updated `processAllAttachments` to include all new vehicle fields in extraction
+- Enhanced VIN extraction patterns in `extraction-patterns.ts`:
+  - Added multiple labeled patterns (VIN, Chassis, Vehicle ID, Afrikaans labels)
+  - Added validation for standalone 17-char sequences (must have both letters and numbers)
+  - Improved deduplication with Set for better performance
+- Enhanced VIN extraction in `attachment-intelligence.ts`:
+  - Added more labeled patterns for Chassis, Vehicle ID, Afrikaans labels
+  - Added validation for standalone VINs
+  - Improved deduplication
+- Enhanced vehicle details extraction in both `extraction-patterns.ts` and `attachment-intelligence.ts`:
+  - Added label-based extraction for make, year, color (looks for "Make:", "Year:", "Color:" etc.)
+  - Expanded list of vehicle makes and colors
+  - Added multiple engine number patterns
+  - Falls back to pattern matching if label-based extraction fails
+
+Stage Summary:
+- VIN/Chassis extraction now uses 6+ different pattern types:
+  - Standard VIN labels (VIN, Vin, vin)
+  - Chassis labels (CHASSIS, Chassis, chassis)
+  - Vehicle ID labels (Vehicle ID, VehicleID, V.I.N.)
+  - Afrikaans labels (Kasnommer, Onderstel)
+  - Short labels with colon (VIN:, Chassis:, Chassis No:)
+  - Standalone 17-char alphanumeric sequences with validation
+- Vehicle details extraction now:
+  - Searches for labeled fields first (Make:, Year:, Color:, Engine:)
+  - Falls back to pattern matching if labels not found
+  - Expanded vehicle makes list (37 makes including newer brands)
+  - Expanded colors list (23 colors)
+  - Multiple engine number patterns
+- All extraction modules updated consistently
+- Lint check passes with only 1 warning
+- Dev server running correctly
+
+---

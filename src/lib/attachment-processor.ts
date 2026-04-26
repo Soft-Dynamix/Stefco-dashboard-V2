@@ -25,6 +25,10 @@ export interface ExtractedAttachmentData {
   vehicleRegistration: string | null;
   vehicleMake: string | null;
   vehicleModel: string | null;
+  vehicleYear: string | null;
+  vehicleColor: string | null;
+  vehicleVinNumber: string | null;
+  engineNumber: string | null;
   excessAmount: string | null;
   incidentDate: string | null;
   claimType: string | null;
@@ -62,6 +66,10 @@ export async function extractFromAttachment(
       vehicleRegistration: null,
       vehicleMake: null,
       vehicleModel: null,
+      vehicleYear: null,
+      vehicleColor: null,
+      vehicleVinNumber: null,
+      engineNumber: null,
       excessAmount: null,
       incidentDate: null,
       claimType: null,
@@ -89,6 +97,10 @@ export async function extractFromAttachment(
     vehicleRegistration: null,
     vehicleMake: null,
     vehicleModel: null,
+    vehicleYear: null,
+    vehicleColor: null,
+    vehicleVinNumber: null,
+    engineNumber: null,
     excessAmount: null,
     incidentDate: null,
     claimType: null,
@@ -146,6 +158,10 @@ async function extractFromImage(
       vehicleRegistration: null,
       vehicleMake: null,
       vehicleModel: null,
+      vehicleYear: null,
+      vehicleColor: null,
+      vehicleVinNumber: null,
+      engineNumber: null,
       excessAmount: null,
       incidentDate: null,
       claimType: null,
@@ -157,7 +173,7 @@ async function extractFromImage(
 
 // Build context-aware extraction prompt
 function buildExtractionPrompt(patterns: CompanyPatterns | null): string {
-  let prompt = `You are an insurance claim document analyzer. Extract the following information from this image/document:
+  let prompt = `You are an insurance claim document analyzer. Extract ALL information from this image/document:
 
 **Required Fields:**
 - claimNumber: The main claim reference number
@@ -167,14 +183,26 @@ function buildExtractionPrompt(patterns: CompanyPatterns | null): string {
 - vehicleRegistration: Vehicle registration (if motor claim)
 - vehicleMake: Vehicle make (if motor claim)
 - vehicleModel: Vehicle model (if motor claim)
+- vehicleYear: Year of vehicle (if motor claim)
+- vehicleColor: Vehicle color (if motor claim)
+- vehicleVinNumber: VIN/Chassis Number - 17 alphanumeric characters (CRITICAL - look for "VIN", "Vin", "Chassis No", "Chassis Number")
+- engineNumber: Engine number (if motor claim)
 - excessAmount: Excess amount as a number only
 - incidentDate: Date in YYYY-MM-DD format
+
+**CRITICAL VIN/CHASSIS EXTRACTION RULES:**
+1. VIN numbers are EXACTLY 17 alphanumeric characters (no I, O, Q)
+2. Look for labels: "VIN", "Vin", "VIN No", "VIN Number", "Chassis", "Chassis No", "Chassis Number", "Vehicle ID"
+3. VINs can appear anywhere in the document - check all tables and sections
+4. Even if document is a quotation, STILL extract the VIN - it identifies the vehicle
+5. Example VIN: AHT286CZ0J1234567
 
 **Important Rules:**
 1. Only extract what is clearly visible in the document
 2. Use null for fields that cannot be found
 3. For claim numbers, look for patterns like "Claim No:", "Reference:", or similar
 4. For vehicle registrations, use South African format (e.g., CA123456, AB12CD GP)
+5. DO NOT SKIP VIN extraction even if other vehicle details are missing
 
 `;
 
@@ -191,7 +219,7 @@ function buildExtractionPrompt(patterns: CompanyPatterns | null): string {
 
   prompt += `
 **Response Format (JSON only, no markdown):**
-{"claimNumber": null, "policyNumber": null, "clientName": null, "claimType": null, "vehicleRegistration": null, "vehicleMake": null, "vehicleModel": null, "excessAmount": null, "incidentDate": null, "confidence": 0-100, "fullText": "extract all visible text"}`;
+{"claimNumber": null, "policyNumber": null, "clientName": null, "claimType": null, "vehicleRegistration": null, "vehicleMake": null, "vehicleModel": null, "vehicleYear": null, "vehicleColor": null, "vehicleVinNumber": null, "engineNumber": null, "excessAmount": null, "incidentDate": null, "confidence": 0-100, "fullText": "extract ALL visible text from the entire document"}`;
 
   return prompt;
 }
@@ -211,6 +239,10 @@ function parseVLMResponse(response: string): ExtractedAttachmentData {
         vehicleRegistration: parsed.vehicleRegistration || null,
         vehicleMake: parsed.vehicleMake || null,
         vehicleModel: parsed.vehicleModel || null,
+        vehicleYear: parsed.vehicleYear || null,
+        vehicleColor: parsed.vehicleColor || null,
+        vehicleVinNumber: parsed.vehicleVinNumber || null,
+        engineNumber: parsed.engineNumber || null,
         excessAmount: parsed.excessAmount || null,
         incidentDate: parsed.incidentDate || null,
         claimType: parsed.claimType || null,
@@ -230,6 +262,10 @@ function parseVLMResponse(response: string): ExtractedAttachmentData {
     vehicleRegistration: null,
     vehicleMake: null,
     vehicleModel: null,
+    vehicleYear: null,
+    vehicleColor: null,
+    vehicleVinNumber: null,
+    engineNumber: null,
     excessAmount: null,
     incidentDate: null,
     claimType: null,
@@ -344,6 +380,10 @@ export async function processAllAttachments(
       { key: "vehicleRegistration", value: result.vehicleRegistration },
       { key: "vehicleMake", value: result.vehicleMake },
       { key: "vehicleModel", value: result.vehicleModel },
+      { key: "vehicleYear", value: result.vehicleYear },
+      { key: "vehicleColor", value: result.vehicleColor },
+      { key: "vehicleVinNumber", value: result.vehicleVinNumber },
+      { key: "engineNumber", value: result.engineNumber },
       { key: "excessAmount", value: result.excessAmount },
       { key: "incidentDate", value: result.incidentDate },
       { key: "claimType", value: result.claimType },

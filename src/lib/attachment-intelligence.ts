@@ -501,25 +501,40 @@ function extractVehicleRegs(text: string): AttachmentCandidate[] {
 /**
  * Extract VIN/Chassis numbers
  * VIN is 17 alphanumeric characters (no I, O, Q)
+ * Multiple patterns to catch various formats
  */
 function extractVinNumbers(text: string): AttachmentCandidate[] {
   const candidates: AttachmentCandidate[] = [];
+  const seen = new Set<string>();
   
   // Pattern 1: With labels (higher confidence)
   const labeledPatterns = [
-    { regex: /(?:VIN|Vin|vin)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
-    { regex: /(?:CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
-    { regex: /(?:Vehicle\s*ID|VehicleID)\s*(?:No|Number|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 90 },
+    // Standard VIN labels
+    { regex: /(?:VIN|Vin|vin)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
+    // Chassis labels (commonly used in South Africa)
+    { regex: /(?:CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
+    // Vehicle ID labels
+    { regex: /(?:Vehicle\s*ID|VehicleID|V\.?I\.?N\.?)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 90 },
+    // Afrikaans labels
+    { regex: /(?:Kasnommer|Onderstel)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 90 },
+    // Short labels with colon
+    { regex: /(?:VIN:|Chassis:|Chassis\s*No:)\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
+    // In tables with various formats
+    { regex: /(?:VIN|Chassis)\s*[:\s]+\s*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 90 },
   ];
   
   for (const { regex, confidence } of labeledPatterns) {
     const matches = text.matchAll(regex);
     for (const match of matches) {
-      candidates.push({
-        value: match[1].toUpperCase(),
-        confidence,
-        context: match[0],
-      });
+      const vin = match[1].toUpperCase();
+      if (!seen.has(vin)) {
+        seen.add(vin);
+        candidates.push({
+          value: vin,
+          confidence,
+          context: match[0],
+        });
+      }
     }
   }
   
@@ -527,14 +542,19 @@ function extractVinNumbers(text: string): AttachmentCandidate[] {
   const standalonePattern = /\b([A-HJ-NPR-Z0-9]{17})\b/g;
   const standaloneMatches = text.matchAll(standalonePattern);
   for (const match of standaloneMatches) {
-    // Check if this VIN wasn't already found with a label
     const vin = match[1].toUpperCase();
-    if (!candidates.some(c => c.value === vin)) {
-      candidates.push({
-        value: vin,
-        confidence: 70, // Lower confidence for unlabeled VINs
-        context: match[0],
-      });
+    if (!seen.has(vin)) {
+      // Validate it looks like a real VIN (must have both letters and numbers)
+      const hasLetters = /[A-HJ-NPR-Z]/.test(vin);
+      const hasNumbers = /[0-9]/.test(vin);
+      if (hasLetters && hasNumbers) {
+        seen.add(vin);
+        candidates.push({
+          value: vin,
+          confidence: 70, // Lower confidence for unlabeled VINs
+          context: match[0],
+        });
+      }
     }
   }
   
@@ -543,6 +563,7 @@ function extractVinNumbers(text: string): AttachmentCandidate[] {
 
 /**
  * Extract vehicle details (make, model, year, color, engine number)
+ * Searches the entire text for vehicle-related information
  */
 function extractVehicleDetailsFromText(text: string): {
   make: string | null;
@@ -559,55 +580,103 @@ function extractVehicleDetailsFromText(text: string): {
     engineNumber: null as string | null,
   };
   
-  // Common vehicle makes
+  // Common vehicle makes (expanded list)
   const makes = [
     "Toyota", "Volkswagen", "VW", "BMW", "Mercedes", "Mercedes-Benz", "Ford",
     "Honda", "Nissan", "Mazda", "Hyundai", "Kia", "Audi", "Volvo", "Lexus",
     "Isuzu", "Mitsubishi", "Subaru", "Suzuki", "Renault", "Peugeot", "Jeep",
     "Land Rover", "Jaguar", "Porsche", "Mini", "Fiat", "Chevrolet", "Opel",
-    "Chery", "Haval", "GWM", "Mahindra"
+    "Chery", "Haval", "GWM", "Mahindra", "Datsun", "Daihatsu", "BYD"
   ];
   
-  // Try to find make
-  for (const make of makes) {
-    const makePattern = new RegExp(`\\b(${make})\\b`, "i");
-    if (makePattern.test(text)) {
-      result.make = make;
-      break;
+  // Try to find make - look for labels first
+  const makeLabelPattern = /(?:Make|Vehicle\s*Make|Manufacturer)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-Za-z]+)/i;
+  const makeLabelMatch = text.match(makeLabelPattern);
+  if (makeLabelMatch) {
+    const foundMake = makes.find(m => m.toLowerCase() === makeLabelMatch[1].toLowerCase());
+    if (foundMake) {
+      result.make = foundMake;
     }
   }
   
-  // Try to find year (4 digits between 1990 and current year + 1)
-  const currentYear = new Date().getFullYear();
-  const yearPattern = /\b((?:19[89]\d|20[0-2]\d))\b/g;
-  const yearMatches = text.match(yearPattern);
-  if (yearMatches) {
-    for (const y of yearMatches) {
-      const yearNum = parseInt(y);
-      if (yearNum >= 1990 && yearNum <= currentYear + 1) {
-        result.year = y;
+  // If not found with label, search for makes in text
+  if (!result.make) {
+    for (const make of makes) {
+      const makePattern = new RegExp(`\\b(${make})\\b`, "i");
+      if (makePattern.test(text)) {
+        result.make = make;
         break;
       }
     }
   }
   
-  // Try to find engine number (usually alphanumeric, 6-12 chars)
-  const enginePattern = /(?:Engine|Eng)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-Z0-9]{6,12})/i;
-  const engineMatch = text.match(enginePattern);
-  if (engineMatch) {
-    result.engineNumber = engineMatch[1].toUpperCase();
+  // Try to find year (4 digits between 1990 and current year + 1)
+  const currentYear = new Date().getFullYear();
+  
+  // Look for labeled year first
+  const yearLabelPattern = /(?:Year|Vehicle\s*Year|Year\s*of\s*Manufacture|Mfg\s*Year)\s*(?:No|Number|#|Nr\.?|:)?\s*(\d{4})/i;
+  const yearLabelMatch = text.match(yearLabelPattern);
+  if (yearLabelMatch) {
+    const yearNum = parseInt(yearLabelMatch[1]);
+    if (yearNum >= 1990 && yearNum <= currentYear + 1) {
+      result.year = yearLabelMatch[1];
+    }
   }
   
-  // Try to find color
+  // If not found with label, search for year patterns
+  if (!result.year) {
+    const yearPattern = /\b((?:19[89]\d|20[0-2]\d))\b/g;
+    const yearMatches = text.match(yearPattern);
+    if (yearMatches) {
+      for (const y of yearMatches) {
+        const yearNum = parseInt(y);
+        if (yearNum >= 1990 && yearNum <= currentYear + 1) {
+          result.year = y;
+          break;
+        }
+      }
+    }
+  }
+  
+  // Try to find engine number with various patterns
+  const enginePatterns = [
+    /(?:Engine|Eng)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-Z0-9]{6,12})/gi,
+    /(?:Motor\s*No|Motor\s*Number)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-Z0-9]{6,12})/gi,
+  ];
+  
+  for (const enginePattern of enginePatterns) {
+    const engineMatch = text.match(enginePattern);
+    if (engineMatch && engineMatch[1]) {
+      result.engineNumber = engineMatch[1].toUpperCase();
+      break;
+    }
+  }
+  
+  // Try to find color with various patterns
   const colors = [
     "White", "Black", "Silver", "Grey", "Gray", "Blue", "Red", "Green",
-    "Yellow", "Gold", "Bronze", "Brown", "Beige", "Orange", "Purple", "Maroon"
+    "Yellow", "Gold", "Bronze", "Brown", "Beige", "Orange", "Purple", "Maroon",
+    "Navy", "Teal", "Cyan", "Magenta", "Pink", "Cream", "Charcoal"
   ];
-  for (const color of colors) {
-    const colorPattern = new RegExp(`\\b${color}\\b`, "i");
-    if (colorPattern.test(text)) {
-      result.color = color;
-      break;
+  
+  // Look for labeled color first
+  const colorLabelPattern = /(?:Color|Colour|Vehicle\s*Color)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-Za-z]+)/i;
+  const colorLabelMatch = text.match(colorLabelPattern);
+  if (colorLabelMatch) {
+    const foundColor = colors.find(c => c.toLowerCase() === colorLabelMatch[1].toLowerCase());
+    if (foundColor) {
+      result.color = foundColor;
+    }
+  }
+  
+  // If not found with label, search for colors in text
+  if (!result.color) {
+    for (const color of colors) {
+      const colorPattern = new RegExp(`\\b${color}\\b`, "i");
+      if (colorPattern.test(text)) {
+        result.color = color;
+        break;
+      }
     }
   }
   
