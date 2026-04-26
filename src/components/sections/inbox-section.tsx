@@ -787,13 +787,35 @@ export function InboxSection() {
                       {new Date(email.receivedAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => viewEmail(email)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => viewEmail(email)}
+                          title="View Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {email.status === "ARCHIVED" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => archiveEmail(email.id, false)}
+                            title="Unarchive"
+                          >
+                            <ArchiveRestore className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => archiveEmail(email.id, true)}
+                            title="Archive"
+                          >
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
