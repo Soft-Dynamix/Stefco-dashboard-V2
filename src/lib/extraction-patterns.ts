@@ -97,6 +97,7 @@ function generatePatternHint(
     vehicleRegistration: [
       /(?:vehicle|reg(?:istration)?)\s*(?:no|number|#)?[:\s]*$/i,
       /reg[:\s]*$/i,
+      /(?:vin|chassis)\s*(?:no|number|#)?[:\s]*$/i,
     ],
     excessAmount: [
       /excess[:\s]*$/i,
@@ -330,8 +331,8 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
       description: "Generic name pattern",
     },
     vehicleRegistration: {
-      pattern: /(?:vehicle|reg(?:istration)?)\s*(?:no|number|#)?[:\s]*([A-Z]{2,3}\d{3}[A-Z]{0,2}|\d{3}[A-Z]{3}\d{2})/i,
-      description: "SA vehicle registration pattern",
+      pattern: /(?:vehicle|reg(?:istration)?|vin|chassis)\s*(?:no|number|#)?[:\s]*([A-Z]{2,3}\d{3}[A-Z]{0,2}|\d{3}[A-Z]{3}\d{2}|[A-HJ-NPR-Z0-9]{17})/i,
+      description: "SA vehicle registration or VIN/Chassis number pattern",
     },
     excessAmount: {
       pattern: /excess[:\s]*(R?\s*[\d,]+\.?\d{0,2})/i,

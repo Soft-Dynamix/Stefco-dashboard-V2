@@ -1131,7 +1131,7 @@ ${truncatedText}
 === DOCUMENT-TYPE-SPECIFIC EXTRACTION ===
 
 **IF THIS IS A QUOTATION:**
-- Extract VIN NUMBER (Vehicle Identification Number) - critical for matching vehicle
+- Extract VIN NUMBER (Vehicle Identification Number) or CHASSIS NUMBER - critical for matching vehicle
 - Extract REGISTRATION NUMBER - identifies the vehicle on policy
 - Extract vehicle details: make, model, year, color
 
@@ -1161,7 +1161,7 @@ Your tasks:
    - ID numbers: 13-digit SA ID format
    - Claim numbers: Various formats (STM-YYYY-NNNNN, OUT/NNNNNN/YY, etc.)
    - Policy numbers: Company-specific formats
-   - VIN numbers: 17-character vehicle identification numbers
+   - VIN numbers: 17-character vehicle identification numbers (may be labeled as "Chassis Number" or "VIN")
 
 Respond in JSON format:
 {
@@ -1174,7 +1174,7 @@ Respond in JSON format:
     "claimNumber": "found or null",
     "policyNumber": "found or null",
     "vehicleRegistration": "found or null",
-    "vehicleVinNumber": "17-char VIN or null",
+    "vehicleVinNumber": "17-char VIN/Chassis Number or null",
     "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
     "incidentDate": "YYYY-MM-DD or null",
     "incidentTime": "HH:MM or null",
@@ -1870,7 +1870,7 @@ export async function performUnifiedAnalysis(
     const docType = r.classification.documentType;
     
     if (docType === "QUOTATION") {
-      hints.push("QUOTATION: Extract VIN NUMBER and REGISTRATION NUMBER - these identify the correct vehicle on the policy schedule");
+      hints.push("QUOTATION: Extract VIN NUMBER/CHASSIS NUMBER and REGISTRATION NUMBER - these identify the correct vehicle on the policy schedule");
       hints.push("Look for: vehicle details, make, model, year, VIN, registration number");
     } else if (docType === "CLAIM_FORM") {
       hints.push("CLAIM FORM: Extract INCIDENT DATE, claim details, driver info, third party info");
@@ -2036,7 +2036,7 @@ Respond in JSON format:
     "vehicleModel": "model or null",
     "vehicleYear": "year or null",
     "vehicleColor": "color or null",
-    "vehicleVinNumber": "17-char VIN or null",
+    "vehicleVinNumber": "17-char VIN/Chassis Number or null",
     "driverName": "if different from policy holder or null",
     "driverIdNumber": "SA ID or null",
     "thirdPartyName": "third party name or null",
