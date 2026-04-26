@@ -1313,3 +1313,42 @@ Technical Changes:
 Root Cause:
 The refetch process only marked emails as "checked" when they were found AND matched in IMAP. Emails that didn't match (due to deleted emails, different Message-IDs, etc.) were never processed and kept showing up in the count indefinitely.
 
+
+---
+Task ID: 48
+Agent: Main Agent
+Task: Fix Attachment Analysis Vision API Error
+
+Work Log:
+- User reported "attachment analysis failed. Error: Failed to process attachment analysis"
+- Investigated error logs and found VLM API error: "图片输入格式/解析错误" (Image input format/parsing error)
+- Identified root cause: attachment content was being passed incorrectly to VLM
+- Fixed attachment content format handling in attachment-ai-analyzer.ts:
+  - Added support for both 'content' (data URL) and 'contentBase64' (raw base64) formats
+  - Added proper data URL construction with correct MIME types
+  - Added getMimeTypeFromFilename helper function
+- Enhanced classifyDocument function with validation and fallback:
+  - Validates image URL format before sending to VLM
+  - Added classifyByFilename fallback for when VLM fails
+  - Better error handling and logging
+- Added PDF-specific handling with analyzePdfWithLlm function:
+  - Uses VLM with PDF data URL
+  - Falls back to filename-based classification if VLM fails
+- Updated attachment-extractor.ts to store content in both formats:
+  - Stores both 'content' (data URL) and 'contentBase64' for compatibility
+  - Proper MIME type annotation for each attachment
+
+Stage Summary:
+- Attachment analysis now handles image content format correctly
+- VLM API calls use proper data URL format
+- Fallback classification available when VLM fails
+- PDF documents handled with specific logic
+- Key indicators should now be detected properly
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts - Fixed content format handling, added validation and fallbacks
+- src/lib/attachment-extractor.ts - Store content in both formats for compatibility
+
+Root Cause:
+The VLM API requires a properly formatted data URL (data:image/jpeg;base64,<content>) but the attachment content was being passed as raw base64 without the data URL prefix. Additionally, PDF files needed special handling as the VLM may not always support them directly.
+

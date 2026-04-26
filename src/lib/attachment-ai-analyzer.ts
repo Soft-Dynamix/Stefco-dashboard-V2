@@ -266,6 +266,36 @@ export async function classifyDocument(
 ): Promise<DocumentClassification> {
   const zai = await getZAI();
   
+  // Validate image URL format
+  if (!imageUrl || imageUrl.length < 50) {
+    console.log(`[classifyDocument] Invalid image URL for ${fileName}: too short or empty`);
+    return {
+      documentType: "OTHER",
+      confidence: 0,
+      reasoning: "Invalid or missing image data",
+      isClaimRelated: false,
+      importance: "LOW"
+    };
+  }
+  
+  // Check if it's a valid data URL format
+  const isValidDataUrl = imageUrl.startsWith("data:image/") || imageUrl.startsWith("data:application/pdf");
+  const isValidUrl = imageUrl.startsWith("http://") || imageUrl.startsWith("https://");
+  
+  if (!isValidDataUrl && !isValidUrl) {
+    console.log(`[classifyDocument] Invalid image URL format for ${fileName}: ${imageUrl.substring(0, 50)}...`);
+    return {
+      documentType: "OTHER",
+      confidence: 0,
+      reasoning: "Invalid image URL format",
+      isClaimRelated: false,
+      importance: "LOW"
+    };
+  }
+  
+  // Log what we're analyzing
+  console.log(`[classifyDocument] Analyzing ${fileName}, data URL length: ${imageUrl.length}`);
+  
   const prompt = `You are an expert insurance document classifier for South African insurance companies.
 
 Analyze this document and classify it into one of these categories:
@@ -323,6 +353,7 @@ Respond in JSON format:
     
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      console.log(`[classifyDocument] Successfully classified ${fileName} as ${parsed.documentType}`);
       return {
         documentType: parsed.documentType || "OTHER",
         confidence: parsed.confidence || 50,
@@ -332,13 +363,77 @@ Respond in JSON format:
       };
     }
   } catch (error) {
-    console.error("Document classification error:", error);
+    console.error(`[classifyDocument] Failed to classify ${fileName}:`, error);
+    
+    // Return a fallback classification based on filename
+    return classifyByFilename(fileName);
   }
 
   return {
     documentType: "OTHER",
     confidence: 0,
     reasoning: "Classification failed",
+    isClaimRelated: false,
+    importance: "LOW"
+  };
+}
+
+/**
+ * Fallback classification based on filename patterns
+ */
+function classifyByFilename(fileName: string): DocumentClassification {
+  const lowerFileName = fileName.toLowerCase();
+  
+  if (lowerFileName.includes("claim") && (lowerFileName.includes("form") || lowerFileName.includes("submission"))) {
+    return {
+      documentType: "CLAIM_FORM",
+      confidence: 40,
+      reasoning: "Classified by filename pattern - recommend manual review",
+      isClaimRelated: true,
+      importance: "HIGH"
+    };
+  }
+  if (lowerFileName.includes("policy") && lowerFileName.includes("schedule")) {
+    return {
+      documentType: "POLICY_SCHEDULE",
+      confidence: 40,
+      reasoning: "Classified by filename pattern - recommend manual review",
+      isClaimRelated: true,
+      importance: "HIGH"
+    };
+  }
+  if (lowerFileName.includes("police") || lowerFileName.includes("cas ")) {
+    return {
+      documentType: "POLICE_REPORT",
+      confidence: 40,
+      reasoning: "Classified by filename pattern - recommend manual review",
+      isClaimRelated: true,
+      importance: "HIGH"
+    };
+  }
+  if (lowerFileName.includes("invoice") || lowerFileName.includes("statement")) {
+    return {
+      documentType: "INVOICE",
+      confidence: 40,
+      reasoning: "Classified by filename pattern",
+      isClaimRelated: false,
+      importance: "MEDIUM"
+    };
+  }
+  if (lowerFileName.includes("quote") || lowerFileName.includes("quotation")) {
+    return {
+      documentType: "QUOTATION",
+      confidence: 40,
+      reasoning: "Classified by filename pattern",
+      isClaimRelated: false,
+      importance: "MEDIUM"
+    };
+  }
+  
+  return {
+    documentType: "OTHER",
+    confidence: 20,
+    reasoning: "Could not classify - recommend manual review",
     isClaimRelated: false,
     importance: "LOW"
   };
@@ -701,15 +796,18 @@ export async function analyzeAttachment(
   attachment: {
     filename: string;
     content?: string; // base64 data URL or extracted text
+    contentBase64?: string; // raw base64 content (without data URL prefix)
     mimeType?: string;
+    contentType?: string; // alternative to mimeType
     size?: number;
   },
   companyContext?: string
 ): Promise<AttachmentAnalysisResult> {
   const startTime = Date.now();
   
-  // Determine file type
-  const fileType = determineFileType(attachment.filename, attachment.mimeType);
+  // Determine file type and MIME type
+  const fileType = determineFileType(attachment.filename, attachment.mimeType || attachment.contentType);
+  const effectiveMimeType = attachment.mimeType || attachment.contentType || getMimeTypeFromFilename(attachment.filename);
   
   let classification: DocumentClassification = {
     documentType: "OTHER",
@@ -726,25 +824,37 @@ export async function analyzeAttachment(
   
   try {
     // Prepare image URL for VLM
+    // Support both 'content' (data URL) and 'contentBase64' (raw base64) formats
     let imageUrl = attachment.content || "";
     
+    // If content is not a data URL but we have contentBase64, construct the data URL
+    if (!imageUrl && attachment.contentBase64) {
+      imageUrl = `data:${effectiveMimeType};base64,${attachment.contentBase64}`;
+    } else if (imageUrl && !imageUrl.startsWith("data:") && !imageUrl.startsWith("http")) {
+      // Content exists but is not a data URL - add the prefix
+      imageUrl = `data:${effectiveMimeType};base64,${imageUrl}`;
+    }
+    
+    // Validate we have usable content
+    const hasValidContent = imageUrl && 
+      imageUrl.length > 50 && 
+      !imageUrl.includes("undefined") &&
+      (imageUrl.startsWith("data:image/") || imageUrl.startsWith("data:application/pdf"));
+    
     // Skip analysis if no content provided
-    if (!imageUrl || imageUrl === "data:undefined;base64,undefined") {
-      console.log(`[attachment-analysis] Skipping ${attachment.filename} - no content provided`);
+    if (!hasValidContent) {
+      console.log(`[attachment-analysis] Skipping ${attachment.filename} - no valid content (size: ${attachment.size || 'unknown'})`);
       classification = {
         documentType: "OTHER",
         confidence: 0,
-        reasoning: "No content available for analysis",
+        reasoning: "No valid content available for analysis - attachment may be too large or missing",
         isClaimRelated: false,
         importance: "LOW"
       };
     }
-    // If it's an image or PDF, use VLM for classification
-    else if (fileType === "IMAGE" || fileType === "PDF") {
-      // Ensure we have a proper data URL
-      if (imageUrl && !imageUrl.startsWith("data:")) {
-        imageUrl = `data:${attachment.mimeType || 'image/jpeg'};base64,${imageUrl}`;
-      }
+    // Handle images with VLM
+    else if (fileType === "IMAGE") {
+      console.log(`[attachment-analysis] Analyzing image: ${attachment.filename} (${effectiveMimeType})`);
       
       // Classify document
       classification = await classifyDocument(imageUrl, attachment.filename, rawExtractedText);
@@ -756,6 +866,37 @@ export async function analyzeAttachment(
       } else if (classification.documentType === "POLICY_SCHEDULE") {
         policyScheduleData = await extractPolicyScheduleData(imageUrl, attachment.filename, companyContext);
         rawExtractedText = (policyScheduleData as any).rawText || "";
+      }
+    }
+    // Handle PDFs - convert to images for VLM analysis
+    else if (fileType === "PDF") {
+      console.log(`[attachment-analysis] Processing PDF: ${attachment.filename}`);
+      
+      try {
+        // For PDFs, we need to use a different approach
+        // Option 1: Use PDF text extraction + VLM for page images
+        // Option 2: Use LLM with extracted text for classification
+        
+        // Use LLM-based analysis for PDFs (more reliable than trying to convert to images)
+        const pdfAnalysis = await analyzePdfWithLlm(imageUrl, attachment.filename, companyContext);
+        classification = pdfAnalysis.classification;
+        rawExtractedText = pdfAnalysis.extractedText;
+        
+        if (classification.documentType === "CLAIM_FORM" && pdfAnalysis.claimData) {
+          claimFormData = pdfAnalysis.claimData;
+        } else if (classification.documentType === "POLICY_SCHEDULE" && pdfAnalysis.policyData) {
+          policyScheduleData = pdfAnalysis.policyData;
+        }
+      } catch (pdfError) {
+        console.error(`[attachment-analysis] PDF analysis failed for ${attachment.filename}:`, pdfError);
+        classification = {
+          documentType: "OTHER",
+          confidence: 20,
+          reasoning: `PDF analysis failed: ${pdfError}. Manual review recommended.`,
+          isClaimRelated: false,
+          importance: "MEDIUM"
+        };
+        processingError = String(pdfError);
       }
     } else {
       // For non-image/PDF, use basic text extraction
@@ -906,6 +1047,182 @@ function determineFileType(fileName: string, mimeType?: string): "PDF" | "IMAGE"
   if (mimeType?.includes("document") || mimeType?.includes("word") || ["doc", "docx", "rtf"].includes(ext)) return "DOC";
   
   return "OTHER";
+}
+
+/**
+ * Get MIME type from filename extension
+ */
+function getMimeTypeFromFilename(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  
+  const mimeTypes: Record<string, string> = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "bmp": "image/bmp",
+    "webp": "image/webp",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
+  
+  return mimeTypes[ext] || "application/octet-stream";
+}
+
+/**
+ * Analyze PDF using LLM (text-based approach)
+ * This is more reliable than trying to send PDFs to vision APIs
+ */
+async function analyzePdfWithLlm(
+  dataUrl: string,
+  fileName: string,
+  companyContext?: string
+): Promise<{
+  classification: DocumentClassification;
+  extractedText: string;
+  claimData?: ClaimFormData;
+  policyData?: PolicyScheduleData;
+}> {
+  const zai = await getZAI();
+  
+  // Extract base64 content from data URL
+  const base64Match = dataUrl.match(/base64,(.+)/);
+  const base64Content = base64Match ? base64Match[1] : "";
+  
+  // For PDF analysis, we use VLM with the PDF data URL
+  // The z-ai-web-dev-sdk supports PDF files in vision API
+  const classificationPrompt = `You are an expert insurance document classifier for South African insurance companies.
+
+Analyze this PDF document and classify it into one of these categories:
+- CLAIM_FORM: Claim submission forms, incident reports, accident notifications
+- POLICY_SCHEDULE: Insurance policy documents, certificates of insurance, schedule of coverage
+- INVOICE: Bills, statements, payment requests
+- QUOTATION: Quotes, estimates, proposals
+- POLICE_REPORT: Police case reports, accident case numbers
+- MEDICAL_REPORT: Medical reports, hospital documentation
+- VEHICLE_ASSESSMENT: Vehicle damage assessments, inspection reports
+- REPAIR_QUOTE: Repair estimates, body shop quotes
+- CORRESPONDENCE: General letters, emails
+- IDENTITY_DOCUMENT: ID cards, passports, driver's licenses
+- PROOF_OF_ADDRESS: Utility bills, bank statements for address proof
+- BANKING_DETAILS: Bank account details, payment information
+- PHOTO_EVIDENCE: Photos of damage, accidents, vehicles
+- EMAIL_PRINTOUT: Printed emails
+- OTHER: Documents that don't fit other categories
+
+Document filename: ${fileName}
+${companyContext ? `This document is from ${companyContext}.` : ''}
+
+Look for:
+1. Document structure and layout
+2. Key phrases and headers (e.g., "Claim Form", "Policy Schedule", "Claim Number")
+3. Presence of claim numbers, policy numbers, vehicle details
+4. Document purpose and content
+5. South African specific formats (ID numbers, vehicle registrations like XX XX GP)
+
+Respond in JSON format:
+{
+  "documentType": "one of the categories above",
+  "confidence": 0-100,
+  "reasoning": "brief explanation of classification",
+  "isClaimRelated": true/false,
+  "importance": "HIGH/MEDIUM/LOW",
+  "extractedText": "key text content from the document",
+  "claimNumber": "if found, or null",
+  "policyNumber": "if found, or null",
+  "vehicleRegistration": "if found, or null",
+  "claimType": "MOTOR/PROPERTY/LIABILITY/THEFT/FIRE/GAP/OTHER if determinable, or null"
+}`;
+
+  try {
+    // Try using VLM with the PDF
+    const response = await zai.chat.completions.createVision({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: classificationPrompt },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ]
+        }
+      ],
+      thinking: { type: "disabled" }
+    });
+
+    const content = response.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      const classification: DocumentClassification = {
+        documentType: parsed.documentType || "OTHER",
+        confidence: parsed.confidence || 50,
+        reasoning: parsed.reasoning || "",
+        isClaimRelated: parsed.isClaimRelated ?? false,
+        importance: parsed.importance || "LOW"
+      };
+      
+      let claimData: ClaimFormData | undefined;
+      let policyData: PolicyScheduleData | undefined;
+      
+      // Extract detailed data based on document type
+      if (classification.documentType === "CLAIM_FORM") {
+        claimData = await extractClaimFormData(dataUrl, fileName, companyContext);
+      } else if (classification.documentType === "POLICY_SCHEDULE") {
+        policyData = await extractPolicyScheduleData(dataUrl, fileName, companyContext);
+      }
+      
+      return {
+        classification,
+        extractedText: parsed.extractedText || "",
+        claimData,
+        policyData
+      };
+    }
+  } catch (error) {
+    console.error("PDF VLM analysis failed, falling back to basic classification:", error);
+  }
+  
+  // Fallback: Use basic classification based on filename
+  const lowerFileName = fileName.toLowerCase();
+  let documentType: DocumentType = "OTHER";
+  let isClaimRelated = false;
+  let importance: "HIGH" | "MEDIUM" | "LOW" = "LOW";
+  
+  if (lowerFileName.includes("claim") || lowerFileName.includes("claimform")) {
+    documentType = "CLAIM_FORM";
+    isClaimRelated = true;
+    importance = "HIGH";
+  } else if (lowerFileName.includes("policy") || lowerFileName.includes("schedule")) {
+    documentType = "POLICY_SCHEDULE";
+    isClaimRelated = true;
+    importance = "HIGH";
+  } else if (lowerFileName.includes("invoice") || lowerFileName.includes("statement")) {
+    documentType = "INVOICE";
+    importance = "MEDIUM";
+  } else if (lowerFileName.includes("quote") || lowerFileName.includes("quotation")) {
+    documentType = "QUOTATION";
+  } else if (lowerFileName.includes("police") || lowerFileName.includes("cas")) {
+    documentType = "POLICE_REPORT";
+    isClaimRelated = true;
+    importance = "HIGH";
+  }
+  
+  return {
+    classification: {
+      documentType,
+      confidence: 30,
+      reasoning: `Classified based on filename pattern. PDF content analysis unavailable - recommend manual review.`,
+      isClaimRelated,
+      importance
+    },
+    extractedText: ""
+  };
 }
 
 function calculateClaimLikelihood(

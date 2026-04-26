@@ -419,15 +419,24 @@ export async function refetchEmailsWithAttachments(limit: number = 50): Promise<
         // Always update the email record to mark it as "checked for attachments"
         // This prevents re-processing emails that legitimately have no attachments
         if (attachments.length > 0) {
-          // Store attachment metadata (without full content for database)
-          const attachmentMetadata = attachments.map(a => ({
-            filename: a.filename,
-            contentType: a.contentType,
-            size: a.size,
-            contentId: a.contentId,
-            // Store base64 content for smaller attachments (< 5MB)
-            contentBase64: a.size < 5 * 1024 * 1024 ? a.contentBase64 : undefined,
-          }));
+          // Store attachment metadata with content for smaller attachments
+          const attachmentMetadata = attachments.map(a => {
+            // Create proper data URL format for the content
+            const contentDataUrl = a.contentBase64 
+              ? `data:${a.contentType};base64,${a.contentBase64}`
+              : undefined;
+            
+            return {
+              filename: a.filename,
+              contentType: a.contentType,
+              mimeType: a.contentType, // Add mimeType for compatibility
+              size: a.size,
+              contentId: a.contentId,
+              // Store as both formats for compatibility
+              contentBase64: a.size < 5 * 1024 * 1024 ? a.contentBase64 : undefined,
+              content: a.size < 5 * 1024 * 1024 ? contentDataUrl : undefined,
+            };
+          });
 
           // Update the email record with attachments
           await db.emailQueue.update({
