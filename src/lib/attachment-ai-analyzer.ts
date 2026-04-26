@@ -1104,7 +1104,18 @@ async function analyzePdfWithLlm(
       const pdfBuffer = Buffer.from(base64Content, 'base64');
       // Dynamic import to avoid ESM caching issues with pdf-parse v2.4.5
       const pdfParse = await import("pdf-parse");
-      const parser = new pdfParse.PDFParse({ data: pdfBuffer });
+      const path = await import("path");
+      
+      // Set worker path to the correct location for Node.js environment
+      // This prevents the "Setting up fake worker failed" error
+      const workerPath = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs');
+      pdfParse.PDFParse.setWorker(workerPath);
+      
+      // Configure parser with verbosity disabled
+      const parser = new pdfParse.PDFParse({ 
+        data: pdfBuffer,
+        verbosity: 0, // Disable verbose logging
+      });
       const pdfData = await parser.getText();
       pdfText = pdfData.text || "";
       console.log(`[analyzePdfWithLlm] Extracted ${pdfText.length} chars of text from PDF`);
