@@ -971,7 +971,7 @@ export function InboxSection() {
 
       {/* Email Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-7xl max-h-[95vh] w-[95vw] p-0 gap-0">
+        <DialogContent className="max-w-[98vw] w-[98vw] h-[96vh] p-0 gap-0 flex flex-col">
           <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
@@ -983,20 +983,14 @@ export function InboxSection() {
                   Review and process this email
                 </DialogDescription>
               </div>
-              {selectedEmail && (
-                <div className="flex items-center gap-2">
-                  {getStatusBadge(selectedEmail.status)}
-                  {selectedEmail.aiClassification && getClassificationBadge(selectedEmail.aiClassification)}
-                </div>
-              )}
             </div>
           </DialogHeader>
           
           {selectedEmail && (
-            <div className="flex flex-col overflow-hidden">
+            <div className="flex flex-col flex-1 overflow-hidden min-h-0">
               {/* Email Header Info */}
-              <div className="px-6 py-4 border-b bg-muted/10">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="px-6 py-3 border-b bg-muted/10 flex-shrink-0">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">From</div>
                     <div className="font-medium text-sm flex items-center gap-2">
@@ -1022,12 +1016,19 @@ export function InboxSection() {
                       {new Date(selectedEmail.receivedAt).toLocaleString()}
                     </div>
                   </div>
+                  <div className="space-y-1">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide">Status</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {getStatusBadge(selectedEmail.status)}
+                      {selectedEmail.aiClassification && getClassificationBadge(selectedEmail.aiClassification)}
+                    </div>
+                  </div>
                 </div>
               </div>
               
               {/* Tabs */}
-              <Tabs defaultValue="content" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="mx-6 mt-4 mb-2">
+              <Tabs defaultValue="content" className="flex-1 flex flex-col overflow-hidden min-h-0">
+                <TabsList className="mx-6 mt-3 mb-2 flex-shrink-0">
                   <TabsTrigger value="content" className="gap-2">
                     <Mail className="h-4 w-4" />
                     Content
@@ -1043,8 +1044,8 @@ export function InboxSection() {
                 </TabsList>
                 
                 {/* Tab Content with Scroll */}
-                <div className="flex-1 overflow-y-auto px-6 pb-6">
-                  <TabsContent value="content" className="mt-4 space-y-4">
+                <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
+                  <TabsContent value="content" className="mt-2 space-y-3" forceMount>
                     {/* Email Body Card */}
                     <Card className="border">
                       <CardHeader className="py-3 px-4 bg-muted/30 border-b">
@@ -1054,7 +1055,7 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[500px]">
+                        <ScrollArea className="h-[calc(96vh-400px)] min-h-[300px]">
                           <div className="p-4">
                             <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
                               {selectedEmail.bodyText || (
@@ -1098,7 +1099,7 @@ export function InboxSection() {
                     </Card>
                   </TabsContent>
                   
-                  <TabsContent value="ai" className="mt-4 space-y-4">
+                  <TabsContent value="ai" className="mt-2 space-y-3" forceMount>
                     {/* Classification Card */}
                     <Card className="border">
                       <CardHeader className="py-3 px-4 bg-muted/30 border-b">
@@ -1148,7 +1149,7 @@ export function InboxSection() {
                         <CardTitle className="text-sm font-medium">AI Reasoning</CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[250px]">
+                        <ScrollArea className="h-[calc(96vh-550px)] min-h-[150px]">
                           <div className="p-4">
                             <p className="text-sm leading-relaxed">
                               {selectedEmail.aiReasoning || (
@@ -1169,7 +1170,7 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[300px]">
+                        <ScrollArea className="h-[calc(96vh-500px)] min-h-[200px]">
                           <div className="p-4">
                             {selectedEmail.aiExtractedData ? (
                               <pre className="text-sm font-mono bg-muted/50 p-3 rounded-md">
@@ -1184,7 +1185,7 @@ export function InboxSection() {
                     </Card>
                   </TabsContent>
                   
-                  <TabsContent value="actions" className="mt-4 space-y-4">
+                  <TabsContent value="actions" className="mt-2 space-y-3" forceMount>
                     {/* Follow-up warning */}
                     {isLikelyFollowUp(selectedEmail) && (
                       <Card className="border-blue-500/50 bg-blue-500/5">
