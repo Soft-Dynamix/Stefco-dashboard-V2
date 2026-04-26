@@ -113,6 +113,5 @@ function normalizeSubject(subject: string): string {
     .toLowerCase()
     .replace(/^(re|fwd|fw|aw|sv|antw):\s*/i, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .substring(0, 100);
+    .trim(); // No truncation - keep full subject for accurate thread matching
 }

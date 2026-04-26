@@ -370,7 +370,7 @@ export async function fetchEmails(limit: number = 50): Promise<{
         const headerMessageId = source.match(/Message-ID:\s*<([^>]+)>/i)?.[1];
         const emailMessageId = headerMessageId || generateMessageId(
           envelope.subject || "(No Subject)",
-          bodyText || source.substring(0, 500),
+          bodyText || source, // Use full source for message ID generation
           fromEmail || ""
         );
         
@@ -383,7 +383,7 @@ export async function fetchEmails(limit: number = 50): Promise<{
           from: fromEmail,
           fromDomain: extractDomain(fromEmail),
           to: envelope.to?.[0]?.address || null,
-          bodyText: bodyText || source.substring(0, 5000),
+          bodyText: bodyText || source, // Use full source - no truncation
           bodyHtml: bodyHtml || null,
           attachments: extractedAttachments,
           date: envelope.date || null,

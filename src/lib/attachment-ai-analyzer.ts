@@ -319,7 +319,7 @@ Analyze this document and classify it into one of these categories:
 - OTHER: Documents that don't fit other categories
 
 Document filename: ${fileName}
-${extractedText ? `Extracted text preview: ${extractedText.slice(0, 500)}...` : ''}
+${extractedText ? `Extracted text: ${extractedText}` : '(No extracted text available)'}
 
 Consider:
 1. Document structure and layout

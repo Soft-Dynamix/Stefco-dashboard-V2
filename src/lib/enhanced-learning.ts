@@ -651,7 +651,7 @@ export async function learnNegativePattern(
           insuranceCompanyId,
           fieldType,
           incorrectValue,
-          contextPattern: context.substring(0, 200),
+          contextPattern: context, // Full context - no truncation
           rejectionReason,
         },
       });

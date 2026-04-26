@@ -54,7 +54,7 @@ export async function recordEvidence(
       value: evidence.value,
       source: evidence.source,
       sourceDetail: evidence.sourceDetail,
-      evidenceText: evidence.evidenceText?.slice(0, 500), // Limit length
+      evidenceText: evidence.evidenceText, // Full evidence text - no truncation
       positionStart: evidence.positionStart,
       positionEnd: evidence.positionEnd,
       confidence: evidence.confidence,

@@ -176,8 +176,8 @@ export async function POST(request: NextRequest) {
       await db.classificationKnowledge.create({
         data: {
           senderDomain: email.fromDomain || "unknown",
-          subject: email.subject?.substring(0, 200),
-          bodySnippet: email.bodyText?.substring(0, 200),
+          subject: email.subject, // Full subject - no truncation
+          bodySnippet: email.bodyText, // Full body - no truncation for better learning
           originalClassification: email.aiClassification,
           correctedClassification: "IGNORE",
           confidence: email.aiConfidence,
