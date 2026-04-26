@@ -898,3 +898,38 @@ Root Cause:
 The API was using the wrong Prisma model name. The email table is defined as `EmailQueue` in the Prisma schema, but the bulk archive API was trying to use `emailInbox` which doesn't exist.
 
 ---
+
+---
+Task ID: 43
+Agent: Main Agent
+Task: Make Email Detail Dialog Full Width
+
+Work Log:
+- User reported email detail dialog was too narrow (only ~500px)
+- Identified issue: shadcn/ui Dialog component has `sm:max-w-lg` as default constraint
+- This default constraint was overriding the viewport width settings
+- Changed DialogContent classes to use `max-w-none` to clear the default
+- Changed width from `w-[100vw]` to `w-screen` for proper full viewport width
+- Dialog now spans full viewport width for better email content visibility
+
+Stage Summary:
+- Email detail dialog now uses full viewport width
+- Content is much more readable with wider layout
+- Better use of screen real estate for email content
+
+Files Modified:
+- src/components/sections/inbox-section.tsx - Updated DialogContent styling
+
+CSS Change:
+```css
+/* Before */
+max-w-[100vw] w-[100vw] h-[96vh]
+
+/* After */
+max-w-none w-screen h-[96vh]
+```
+
+Root Cause:
+The shadcn/ui Dialog component has a default `sm:max-w-lg` class that limits dialog width to ~512px on larger screens. The `max-w-none` class clears this default constraint, allowing the custom width to take effect.
+
+---
