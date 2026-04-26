@@ -971,7 +971,7 @@ export function InboxSection() {
 
       {/* Email Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-5xl max-h-[92vh] p-0 gap-0">
+        <DialogContent className="max-w-7xl max-h-[95vh] w-[95vw] p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
@@ -1054,7 +1054,7 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[300px]">
+                        <ScrollArea className="h-[500px]">
                           <div className="p-4">
                             <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
                               {selectedEmail.bodyText || (
@@ -1148,7 +1148,7 @@ export function InboxSection() {
                         <CardTitle className="text-sm font-medium">AI Reasoning</CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[120px]">
+                        <ScrollArea className="h-[250px]">
                           <div className="p-4">
                             <p className="text-sm leading-relaxed">
                               {selectedEmail.aiReasoning || (
@@ -1169,7 +1169,7 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[200px]">
+                        <ScrollArea className="h-[300px]">
                           <div className="p-4">
                             {selectedEmail.aiExtractedData ? (
                               <pre className="text-sm font-mono bg-muted/50 p-3 rounded-md">
