@@ -971,9 +971,9 @@ export function InboxSection() {
 
       {/* Email Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent style={{ maxWidth: '100vw', width: '100vw' }} className="h-[96vh] p-0 gap-0 flex flex-col rounded-none border-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30">
-            <div className="flex items-start justify-between">
+        <DialogContent style={{ maxWidth: '95vw', width: '95vw' }} className="h-[92vh] p-0 gap-0 flex flex-col rounded-lg border">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b bg-muted/30">
+            <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <DialogTitle className="text-xl flex items-center gap-2">
                   <Mail className="h-5 w-5 text-primary" />
@@ -983,6 +983,14 @@ export function InboxSection() {
                   Review and process this email
                 </DialogDescription>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDetailsOpen(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </DialogHeader>
           
@@ -1055,9 +1063,9 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(96vh-350px)] min-h-[400px]">
-                          <div className="p-4">
-                            <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
+                        <ScrollArea className="h-[calc(92vh-380px)] min-h-[350px]">
+                          <div className="p-5">
+                            <pre className="text-sm whitespace-pre-wrap font-sans leading-7 tracking-wide">
                               {selectedEmail.bodyText || (
                                 <span className="text-muted-foreground italic">No content available</span>
                               )}

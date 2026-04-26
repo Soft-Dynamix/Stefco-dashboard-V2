@@ -933,3 +933,42 @@ Root Cause:
 The shadcn/ui Dialog component has a default `sm:max-w-lg` class that limits dialog width to ~512px on larger screens. The `max-w-none` class clears this default constraint, allowing the custom width to take effect.
 
 ---
+
+---
+Task ID: 44
+Agent: Main Agent
+Task: Improve Email Dialog Sizing and Readability
+
+Work Log:
+- Adjusted dialog size to 95vw width and 92vh height (slightly smaller than full screen)
+- Added rounded corners and border for better visual appearance
+- Improved email body readability:
+  - Changed font from monospace to sans-serif for better readability
+  - Increased line height to 7 (leading-7) for better spacing
+  - Added letter spacing (tracking-wide) for easier reading
+  - Increased padding from 4 to 5 for more breathing room
+- Added explicit close button in dialog header for easier dismissal
+- Adjusted scroll area heights to match new dialog dimensions
+
+Stage Summary:
+- Dialog now has a more comfortable size (95vw × 92vh)
+- Content is easier to read with improved typography
+- Better visual appearance with rounded corners
+- Added explicit close button in header
+
+Files Modified:
+- src/components/sections/inbox-section.tsx - Dialog sizing and content styling
+
+Key Changes:
+```css
+/* Dialog sizing */
+maxWidth: '95vw', width: '95vw', height: '92vh'
+
+/* Email body typography */
+font-sans (instead of font-mono)
+leading-7 (increased line height)
+tracking-wide (letter spacing)
+p-5 (more padding)
+```
+
+---
