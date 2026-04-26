@@ -1969,7 +1969,7 @@ export function InboxSection() {
 
       {/* Attachment Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[95vh] p-0">
           <DialogHeader className="p-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
@@ -1979,7 +1979,7 @@ export function InboxSection() {
               {previewAttachment?.contentType}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden min-h-[400px] max-h-[calc(90vh-120px)]">
+          <div className="flex-1 overflow-hidden h-[calc(95vh-120px)]">
             {previewAttachment && (
               previewAttachment.contentType.startsWith('image/') ? (
                 <div className="overflow-auto p-4 h-full">
