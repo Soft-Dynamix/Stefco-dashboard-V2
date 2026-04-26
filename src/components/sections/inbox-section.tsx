@@ -1407,18 +1407,20 @@ export function InboxSection() {
                                       size="sm"
                                       className="gap-2"
                                       onClick={async () => {
+                                        setIsLoadingAnalysis(true);
                                         try {
+                                          // UNIFIED ANALYSIS - analyzes email body + ALL attachments together
                                           const response = await fetch('/api/attachment-analysis', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({
-                                              action: 'analyze',
+                                              action: 'unified',
                                               emailId: selectedEmail.id,
                                               attachments: attachments.map((a: { filename: string; contentType?: string; size?: number; contentBase64?: string }) => ({
                                                 filename: a.filename,
                                                 mimeType: a.contentType,
                                                 size: a.size,
-                                                content: a.contentBase64 ? `data:${a.contentType || 'image/jpeg'};base64,${a.contentBase64}` : undefined,
+                                                contentBase64: a.contentBase64,
                                               })),
                                               companyContext: selectedEmail.fromDomain,
                                             }),
@@ -1426,8 +1428,8 @@ export function InboxSection() {
                                           const result = await response.json();
                                           if (result.success) {
                                             toast({
-                                              title: "Analysis Complete",
-                                              description: `Found ${result.summary?.keyIndicators?.length || 0} key indicators. Claim likelihood: ${result.summary?.overallClaimLikelihood || 0}%`,
+                                              title: "Unified Analysis Complete",
+                                              description: `Analyzed email body + ${result.unifiedAnalysis?.documentsAnalyzed?.attachments?.length || 0} documents. Found ${result.unifiedAnalysis?.keyIndicators?.length || 0} key indicators. Claim likelihood: ${result.unifiedAnalysis?.overallClaimLikelihood || 0}%`,
                                             });
                                             // Refresh the analysis display
                                             fetchAttachmentAnalysis(selectedEmail.id);
@@ -1440,11 +1442,13 @@ export function InboxSection() {
                                             description: String(error),
                                             variant: "destructive",
                                           });
+                                        } finally {
+                                          setIsLoadingAnalysis(false);
                                         }
                                       }}
                                     >
                                       <FileSearch className="h-4 w-4" />
-                                      {isLoadingAnalysis ? "Loading..." : "Analyze Attachments"}
+                                      {isLoadingAnalysis ? "Analyzing..." : "Analyze Everything"}
                                     </Button>
                                   </div>
                                   

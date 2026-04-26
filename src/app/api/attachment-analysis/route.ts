@@ -5,6 +5,7 @@
  * - Document type classification (claim form, policy schedule, etc.)
  * - Data extraction from claim forms and policy schedules
  * - Claim likelihood scoring based on attachment content
+ * - UNIFIED analysis combining email body + ALL attachments
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +15,7 @@ import {
   analyzeAllAttachments,
   learnFromFeedback,
   getLearnedPatterns,
+  performUnifiedAnalysis,
 } from "@/lib/attachment-ai-analyzer";
 
 // GET: Retrieve attachment analysis for an email
@@ -187,6 +189,57 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (action === "unified") {
+      // UNIFIED ANALYSIS: Email body + ALL attachments together
+      // This is the comprehensive analysis that checks EVERYTHING
+      if (!emailId) {
+        return NextResponse.json(
+          { error: "emailId is required for unified analysis" },
+          { status: 400 }
+        );
+      }
+
+      // Get the email with all its data
+      const email = await db.emailQueue.findUnique({
+        where: { id: emailId },
+      });
+
+      if (!email) {
+        return NextResponse.json(
+          { error: "Email not found" },
+          { status: 404 }
+        );
+      }
+
+      // Parse attachments from email
+      let attachmentsToAnalyze = attachments;
+      if (!attachmentsToAnalyze && email.attachments) {
+        try {
+          attachmentsToAnalyze = JSON.parse(email.attachments);
+        } catch {
+          attachmentsToAnalyze = [];
+        }
+      }
+
+      // Perform unified analysis - combines email body + ALL attachments
+      const result = await performUnifiedAnalysis(
+        emailId,
+        {
+          subject: email.subject,
+          from: email.from,
+          bodyText: email.bodyText,
+        },
+        attachmentsToAnalyze || [],
+        companyContext || email.fromDomain || undefined
+      );
+
+      return NextResponse.json({
+        success: true,
+        unifiedAnalysis: result,
+        message: `Analyzed email body + ${result.documentsAnalyzed.attachments.length} attachments`,
+      });
+    }
+
     if (action === "feedback") {
       // Learn from user feedback
       if (!emailId || !feedback) {
@@ -234,7 +287,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Invalid action. Use 'analyze', 'feedback', or 'analyze-single'" },
+      { error: "Invalid action. Use 'analyze', 'unified', 'feedback', or 'analyze-single'" },
       { status: 400 }
     );
   } catch (error) {

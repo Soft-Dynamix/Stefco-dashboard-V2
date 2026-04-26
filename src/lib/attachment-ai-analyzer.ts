@@ -1629,3 +1629,335 @@ export async function getLearnedPatterns(companyContext: string): Promise<Array<
     patterns: Array.from(patterns.values()).sort((a, b) => b.count - a.count)
   }));
 }
+
+// =============================================================================
+// UNIFIED EMAIL + ATTACHMENT ANALYSIS
+// =============================================================================
+
+/**
+ * Unified analysis result that combines email content + all attachments
+ */
+export interface UnifiedAnalysisResult {
+  // Classification
+  classification: "NEW_CLAIM" | "IGNORE" | "MISSING_INFO" | "OTHER";
+  confidence: number;
+  reasoning: string;
+  
+  // Combined extracted data from email body + ALL attachments
+  extractedData: {
+    claimNumber: string | null;
+    policyNumber: string | null;
+    claimType: "MOTOR" | "PROPERTY" | "LIABILITY" | "THEFT" | "FIRE" | "GAP" | "OTHER" | null;
+    incidentDate: string | null;
+    incidentLocation: string | null;
+    incidentDescription: string | null;
+    
+    // Client/Policy Holder info
+    clientName: string | null;
+    clientIdNumber: string | null;
+    clientPhone: string | null;
+    clientEmail: string | null;
+    clientAddress: string | null;
+    
+    // Vehicle info (for motor claims)
+    vehicleRegistration: string | null;
+    vehicleMake: string | null;
+    vehicleModel: string | null;
+    vehicleYear: string | null;
+    vehicleColor: string | null;
+    vehicleVinNumber: string | null;
+    
+    // Financial info
+    excessAmount: number | null;
+    estimatedDamage: number | null;
+    sumInsured: number | null;
+    
+    // Insurance company
+    insuranceCompany: string | null;
+    
+    // Policy dates
+    policyInceptionDate: string | null;
+    policyExpiryDate: string | null;
+  };
+  
+  // Source tracking - where each piece of data came from
+  dataSources: {
+    claimNumber: "email_body" | "attachment" | null;
+    policyNumber: "email_body" | "attachment" | null;
+    clientName: "email_body" | "attachment" | null;
+    vehicleRegistration: "email_body" | "attachment" | null;
+    [key: string]: "email_body" | "attachment" | null;
+  };
+  
+  // Key indicators found across all sources
+  keyIndicators: string[];
+  
+  // Missing critical information
+  missingInformation: string[];
+  
+  // Document breakdown
+  documentsAnalyzed: {
+    emailBody: boolean;
+    attachments: Array<{
+      fileName: string;
+      documentType: string;
+      isClaimRelated: boolean;
+      keyFindings: string[];
+    }>;
+  };
+  
+  // Overall assessment
+  overallClaimLikelihood: number;
+  isReadyForProcessing: boolean;
+  recommendedAction: "CREATE_CLAIM" | "REQUEST_INFO" | "MANUAL_REVIEW" | "IGNORE";
+}
+
+/**
+ * Perform unified analysis of email + all attachments
+ * This is the main function that analyzes EVERYTHING together
+ */
+export async function performUnifiedAnalysis(
+  emailId: string,
+  emailData: {
+    subject: string | null;
+    from: string | null;
+    bodyText: string | null;
+  },
+  attachments: Array<{
+    filename: string;
+    content?: string;
+    contentBase64?: string;
+    mimeType?: string;
+    size?: number;
+  }>,
+  companyContext?: string
+): Promise<UnifiedAnalysisResult> {
+  const zai = await getZAI();
+  console.log(`[unified-analysis] Starting unified analysis for email ${emailId}`);
+  console.log(`[unified-analysis] Email subject: ${emailData.subject}`);
+  console.log(`[unified-analysis] Attachments to process: ${attachments.length}`);
+  
+  // Step 1: Analyze ALL attachments first
+  const attachmentResults: AttachmentAnalysisResult[] = [];
+  for (const attachment of attachments) {
+    try {
+      const result = await analyzeAttachment(emailId, attachment, companyContext);
+      attachmentResults.push(result);
+      console.log(`[unified-analysis] Processed attachment: ${attachment.filename} -> ${result.classification.documentType}`);
+    } catch (error) {
+      console.error(`[unified-analysis] Failed to analyze attachment ${attachment.filename}:`, error);
+    }
+  }
+  
+  // Step 2: Gather all extracted text from attachments
+  const attachmentTexts = attachmentResults.map(r => ({
+    fileName: r.fileName,
+    documentType: r.classification.documentType,
+    text: r.rawExtractedText.slice(0, 2000), // Limit per attachment
+    claimData: r.claimFormData,
+    policyData: r.policyScheduleData
+  }));
+  
+  // Step 3: Create unified analysis prompt with ALL data
+  const attachmentSummary = attachmentTexts.map(a => 
+    `\n--- ATTACHMENT: ${a.fileName} (${a.documentType}) ---\n${a.text || '(No text extracted)'}`
+  ).join('\n');
+  
+  const combinedClaimData = combineClaimFormData(attachmentResults);
+  const combinedPolicyData = combinePolicyScheduleData(attachmentResults);
+  
+  const unifiedPrompt = `You are the Unified Claims Analysis AI for STEFCO Consultants.
+
+Analyze ALL available information from this email and its attachments to produce ONE comprehensive assessment.
+
+=== EMAIL CONTENT ===
+Subject: ${emailData.subject || '(No Subject)'}
+From: ${emailData.from || 'Unknown'}
+Body:
+${(emailData.bodyText || '').substring(0, 4000)}
+
+=== ATTACHMENTS (${attachments.length} files) ===
+${attachmentSummary || '(No attachments)'}
+
+=== PRE-EXTRACTED DATA FROM ATTACHMENTS ===
+Claim Data: ${JSON.stringify(combinedClaimData, null, 2)}
+Policy Data: ${JSON.stringify(combinedPolicyData, null, 2)}
+
+=== YOUR TASK ===
+Analyze ALL the above information and extract:
+1. A single unified classification (NEW_CLAIM, IGNORE, MISSING_INFO, OTHER)
+2. Combined extracted data from ALL sources (email body + attachments)
+3. Track where each piece of data came from
+4. Identify key indicators found
+5. List missing critical information
+
+Rules:
+- Cross-reference data between email body and attachments
+- If email body mentions a claim number but attachment has more details, combine them
+- If there are conflicts, prefer attachment data for claim details
+- Be thorough - check ALL attachments for relevant information
+- South African formats: vehicle reg (XX XX GP), phone (+27/0 prefix), ID (13 digits)
+
+Respond in JSON format:
+{
+  "classification": "NEW_CLAIM|IGNORE|MISSING_INFO|OTHER",
+  "confidence": 0-100,
+  "reasoning": "Comprehensive explanation considering ALL sources",
+  "extractedData": {
+    "claimNumber": "from email or attachment or null",
+    "policyNumber": "from email or attachment or null",
+    "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
+    "incidentDate": "YYYY-MM-DD or null",
+    "incidentLocation": "location or null",
+    "incidentDescription": "description from any source or null",
+    "clientName": "name from email or attachment or null",
+    "clientIdNumber": "SA ID number or null",
+    "clientPhone": "phone or null",
+    "clientEmail": "email or null",
+    "clientAddress": "address or null",
+    "vehicleRegistration": "SA vehicle reg or null",
+    "vehicleMake": "make or null",
+    "vehicleModel": "model or null",
+    "vehicleYear": "year or null",
+    "vehicleColor": "color or null",
+    "vehicleVinNumber": "VIN or null",
+    "excessAmount": number or null,
+    "estimatedDamage": number or null,
+    "sumInsured": number or null,
+    "insuranceCompany": "company name or null",
+    "policyInceptionDate": "YYYY-MM-DD or null",
+    "policyExpiryDate": "YYYY-MM-DD or null"
+  },
+  "dataSources": {
+    "claimNumber": "email_body|attachment|null",
+    "policyNumber": "email_body|attachment|null",
+    "clientName": "email_body|attachment|null",
+    "vehicleRegistration": "email_body|attachment|null"
+  },
+  "keyIndicators": ["list of all claim indicators found"],
+  "missingInformation": ["list of critical missing info"],
+  "overallClaimLikelihood": 0-100,
+  "isReadyForProcessing": true/false,
+  "recommendedAction": "CREATE_CLAIM|REQUEST_INFO|MANUAL_REVIEW|IGNORE"
+}`;
+
+  try {
+    const response = await zai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: unifiedPrompt }]
+    });
+    
+    const content = response.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      const result: UnifiedAnalysisResult = {
+        classification: parsed.classification || "OTHER",
+        confidence: parsed.confidence || 50,
+        reasoning: parsed.reasoning || "Unable to determine classification",
+        extractedData: parsed.extractedData || {},
+        dataSources: parsed.dataSources || {},
+        keyIndicators: parsed.keyIndicators || [],
+        missingInformation: parsed.missingInformation || [],
+        documentsAnalyzed: {
+          emailBody: !!(emailData.bodyText),
+          attachments: attachmentResults.map(r => ({
+            fileName: r.fileName,
+            documentType: r.classification.documentType,
+            isClaimRelated: r.classification.isClaimRelated,
+            keyFindings: r.claimFormData ? Object.entries(r.claimFormData)
+              .filter(([k, v]) => v !== null && v !== undefined)
+              .map(([k, v]) => `${k}: ${v}`) : []
+          }))
+        },
+        overallClaimLikelihood: parsed.overallClaimLikelihood || 0,
+        isReadyForProcessing: parsed.isReadyForProcessing || false,
+        recommendedAction: parsed.recommendedAction || "MANUAL_REVIEW"
+      };
+      
+      // Store the unified analysis result
+      await db.emailQueue.update({
+        where: { id: emailId },
+        data: {
+          aiClassification: result.classification,
+          aiConfidence: result.confidence,
+          aiReasoning: result.reasoning,
+          aiExtractedData: JSON.stringify(result.extractedData)
+        }
+      });
+      
+      // Update or create attachment summary
+      const hasClaimForm = attachmentResults.some(r => r.classification.documentType === "CLAIM_FORM");
+      const hasPolicySchedule = attachmentResults.some(r => r.classification.documentType === "POLICY_SCHEDULE");
+      const hasSupportingDocuments = attachmentResults.some(r => 
+        ["POLICE_REPORT", "MEDICAL_REPORT", "VEHICLE_ASSESSMENT", "REPAIR_QUOTE", "PHOTO_EVIDENCE"].includes(r.classification.documentType)
+      );
+      
+      await db.emailAttachmentSummary.upsert({
+        where: { emailQueueId: emailId },
+        create: {
+          emailQueueId: emailId,
+          totalAttachments: attachments.length,
+          claimRelatedAttachments: attachmentResults.filter(r => r.classification.isClaimRelated).length,
+          hasClaimForm,
+          hasPolicySchedule,
+          hasSupportingDocuments,
+          combinedClaimData: JSON.stringify(result.extractedData),
+          combinedPolicyData: JSON.stringify(combinedPolicyData),
+          overallClaimLikelihood: result.overallClaimLikelihood,
+          isLikelyNewClaim: result.classification === "NEW_CLAIM",
+          confidenceLevel: result.confidence >= 80 ? "HIGH" : result.confidence >= 60 ? "MEDIUM" : "LOW",
+          assessmentReason: result.reasoning,
+          keyIndicators: JSON.stringify(result.keyIndicators),
+          missingInformation: JSON.stringify(result.missingInformation)
+        },
+        update: {
+          totalAttachments: attachments.length,
+          claimRelatedAttachments: attachmentResults.filter(r => r.classification.isClaimRelated).length,
+          hasClaimForm,
+          hasPolicySchedule,
+          hasSupportingDocuments,
+          combinedClaimData: JSON.stringify(result.extractedData),
+          overallClaimLikelihood: result.overallClaimLikelihood,
+          isLikelyNewClaim: result.classification === "NEW_CLAIM",
+          confidenceLevel: result.confidence >= 80 ? "HIGH" : result.confidence >= 60 ? "MEDIUM" : "LOW",
+          assessmentReason: result.reasoning,
+          keyIndicators: JSON.stringify(result.keyIndicators),
+          missingInformation: JSON.stringify(result.missingInformation)
+        }
+      });
+      
+      console.log(`[unified-analysis] Complete: ${result.classification} (${result.confidence}% confidence)`);
+      console.log(`[unified-analysis] Key indicators: ${result.keyIndicators.join(', ')}`);
+      
+      return result;
+    }
+  } catch (error) {
+    console.error("[unified-analysis] Failed:", error);
+  }
+  
+  // Fallback result
+  return {
+    classification: "OTHER",
+    confidence: 0,
+    reasoning: "Failed to perform unified analysis",
+    extractedData: {},
+    dataSources: {},
+    keyIndicators: [],
+    missingInformation: ["Analysis failed"],
+    documentsAnalyzed: {
+      emailBody: !!(emailData.bodyText),
+      attachments: attachmentResults.map(r => ({
+        fileName: r.fileName,
+        documentType: r.classification.documentType,
+        isClaimRelated: r.classification.isClaimRelated,
+        keyFindings: []
+      }))
+    },
+    overallClaimLikelihood: 0,
+    isReadyForProcessing: false,
+    recommendedAction: "MANUAL_REVIEW"
+  };
+}
