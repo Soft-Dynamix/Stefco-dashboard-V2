@@ -135,6 +135,7 @@ GET /api/email-inbox?status=PENDING&page=1&limit=50
       "from": "claims@santam.co.za",
       "fromDomain": "santam.co.za",
       "bodyText": "Email content...",
+      "bodyHtml": "<html>...</html>",
       "aiClassification": "NEW_CLAIM",
       "aiConfidence": 92.5,
       "aiReasoning": "Email contains claim number and vehicle details...",
@@ -148,6 +149,36 @@ GET /api/email-inbox?status=PENDING&page=1&limit=50
     "total": 234,
     "totalPages": 5
   }
+}
+```
+
+### Get Email Details
+
+```http
+GET /api/email-inbox/{id}
+```
+
+**Response:**
+```json
+{
+  "id": "email-id",
+  "messageId": "<unique-message-id@domain.com>",
+  "subject": "Claim Notification",
+  "from": "claims@santam.co.za",
+  "fromDomain": "santam.co.za",
+  "to": "intake@stefco.co.za",
+  "bodyText": "Plain text content...",
+  "bodyHtml": "<html><body>HTML content...</body></html>",
+  "attachments": null,
+  "aiClassification": "NEW_CLAIM",
+  "aiConfidence": 92.5,
+  "aiReasoning": "Email contains claim number...",
+  "aiExtractedData": "{\"claimNumber\":\"STM-2025-00001\",\"clientName\":\"John Doe\"}",
+  "status": "AI_ANALYZED",
+  "processingRoute": "ai_suggest",
+  "learningHintsCount": 5,
+  "receivedAt": "2025-04-26T10:00:00Z",
+  "processedAt": "2025-04-26T10:01:00Z"
 }
 ```
 
@@ -170,6 +201,33 @@ Content-Type: application/json
 - `IGNORED` - Email ignored with feedback
 - `ARCHIVED` - Archived for organization
 
+### Bulk Archive Emails (v2.2.0)
+
+```http
+POST /api/email-inbox/bulk-archive
+Content-Type: application/json
+
+{
+  "emailIds": ["email-id-1", "email-id-2", "email-id-3"],
+  "status": "ARCHIVED"
+}
+```
+
+**Request Body:**
+| Field | Type | Description |
+|-------|------|-------------|
+| emailIds | string[] | Array of email IDs to update |
+| status | string | Target status: ARCHIVED or PENDING |
+
+**Response:**
+```json
+{
+  "success": true,
+  "updated": 3,
+  "message": "Successfully archived 3 emails"
+}
+```
+
 ---
 
 ## Email Polling API
@@ -189,7 +247,13 @@ GET /api/email-poll
   "totalQueued": 5,
   "schedulerEnabled": true,
   "pollInterval": 5,
-  "autoAnalyzeEnabled": true
+  "autoAnalyzeEnabled": true,
+  "autoClaimCreationEnabled": false,
+  "automationStats": {
+    "manual": 20,
+    "semi": 15,
+    "auto": 10
+  }
 }
 ```
 
@@ -210,8 +274,30 @@ Content-Type: application/json
   "success": true,
   "fetched": 10,
   "analyzed": 10,
-  "created": 2,
-  "message": "Fetched 10 new emails, analyzed 10, created 2 claims"
+  "message": "Fetched 10 new emails, analyzed 10"
+}
+```
+
+### Run Full Automation Pipeline
+
+```http
+POST /api/email-poll
+Content-Type: application/json
+
+{
+  "limit": 50,
+  "fullPipeline": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "fetched": 10,
+  "analyzed": 10,
+  "claimsCreated": 3,
+  "message": "Fetched 10, analyzed 10, created 3 claims"
 }
 ```
 
@@ -223,6 +309,28 @@ Content-Type: application/json
 
 {
   "limit": 50
+}
+```
+
+### Auto-Create Claims (v2.1.0)
+
+```http
+PUT /api/email-poll
+Content-Type: application/json
+
+{
+  "limit": 50,
+  "createClaims": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "created": 5,
+  "skipped": 10,
+  "message": "Created 5 claims, skipped 10"
 }
 ```
 
@@ -344,7 +452,19 @@ Content-Type: application/json
 - `DUPLICATE` - Duplicate claim
 - `NOT_CLAIM` - Not a claim-related email
 - `ALREADY_PROCESSED` - Claim already exists
+- `FOLLOW_UP_EMAIL` - Follow-up or reply email
+- `MARKETING` - Marketing material
+- `INTERNAL_EMAIL` - Internal company email
 - `OTHER` - Other reason
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Feedback submitted successfully",
+  "autoIgnoreRuleCreated": true
+}
+```
 
 ---
 
@@ -411,6 +531,44 @@ GET /api/audit?action=CLAIM_CREATED&page=1&limit=50
 
 ---
 
+## Process Email API
+
+### Process Single Email
+
+```http
+POST /api/process-email
+Content-Type: application/json
+
+{
+  "emailId": "email-id",
+  "subject": "Claim Notification",
+  "from": "claims@santam.co.za",
+  "bodyText": "Email content...",
+  "fromDomain": "santam.co.za"
+}
+```
+
+**Response:**
+```json
+{
+  "classification": {
+    "classification": "NEW_CLAIM",
+    "confidence": 92.5,
+    "reasoning": "Email contains claim number and vehicle details..."
+  },
+  "extraction": {
+    "claimNumber": "STM-2025-00001",
+    "clientName": "John Doe",
+    "clientEmail": "john@example.com",
+    "claimType": "MOTOR",
+    "vehicleRegistration": "CA123456"
+  },
+  "learningHintsCount": 5
+}
+```
+
+---
+
 ## Error Responses
 
 All endpoints return consistent error responses:
@@ -441,6 +599,20 @@ Currently, there are no rate limits enforced. However, please be mindful of:
 
 ---
 
+## Email Data Format
+
+### Quoted-Printable Decoding (v2.2.0)
+
+Emails fetched via IMAP are automatically decoded from quoted-printable encoding. The system handles:
+- `=20` → Space character
+- `=A0` → Non-breaking space
+- `=3D` → Equals sign
+- Soft line breaks (`=\r\n`) → Removed
+
+Both `bodyText` and `bodyHtml` fields are decoded before storage. For existing emails, the frontend provides fallback decoding.
+
+---
+
 ## Webhook Support (Planned)
 
 Future versions will support webhooks for:
@@ -450,4 +622,4 @@ Future versions will support webhooks for:
 
 ---
 
-*Last updated: 2025-04-26*
+*Last updated: 2025-04-26 (v2.2.0)*

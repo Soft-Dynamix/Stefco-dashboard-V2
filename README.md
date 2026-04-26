@@ -15,11 +15,14 @@ STEFCO Claims Dashboard is a comprehensive claims management platform that autom
 - **Learning Engine** - Pattern learning from user corrections
 - **Attachment Processing** - VLM-based extraction from images/PDFs
 
-### Email Management (v2.1.0)
+### Email Management (v2.2.0)
+- **Bulk Email Operations** - Select multiple emails and archive/unarchive at once
+- **HTML Email Rendering** - View original email formatting with images, tables, signatures
 - **Email Pagination** - 50 emails per page with navigation
 - **Email Archive** - Archive processed emails to keep inbox organized
 - **Auto-Analysis** - Emails automatically analyzed when fetched
 - **Deduplication** - Prevents duplicate emails using Message-ID headers
+- **AI Auto-fill** - Smart suggestions when ignoring emails
 
 ### AI & Learning Features
 - **Ensemble Extraction** - Combines regex, AI, template, and position methods
@@ -54,6 +57,7 @@ src/
 │   │   ├── claims/             # Claims CRUD
 │   │   ├── claim-feedback/     # Field corrections with learning
 │   │   ├── enhanced-extract/   # Ensemble extraction API
+│   │   ├── email-inbox/        # Email inbox with bulk operations
 │   │   ├── email-poll/         # IMAP email polling
 │   │   ├── learning/           # Learning engine stats
 │   │   ├── rejection-feedback/ # Structured feedback collection
@@ -66,10 +70,16 @@ src/
 ├── components/
 │   ├── layout/                 # Navigation sidebar
 │   ├── sections/               # Main UI sections
+│   │   ├── dashboard-section.tsx
+│   │   ├── inbox-section.tsx   # Email inbox with bulk operations
+│   │   ├── claims-section.tsx
+│   │   ├── learning-section.tsx
+│   │   └── ...                 # Other sections
+│   ├── feedback-modal.tsx      # AI-powered rejection feedback
 │   └── ui/                     # shadcn/ui components
 └── lib/
     ├── db.ts                   # Prisma client
-    ├── email-poller.ts         # IMAP email fetching
+    ├── email-poller.ts         # IMAP email fetching with decoding
     ├── extraction-patterns.ts  # Pattern learning utilities
     ├── attachment-processor.ts # VLM attachment extraction
     └── enhanced-learning.ts    # Advanced learning engine
@@ -116,7 +126,10 @@ PUT    /api/claims/[id]     # Update claim
 
 ### Email Processing
 ```
-GET    /api/email-inbox     # List queued emails
+GET    /api/email-inbox     # List queued emails with pagination
+POST   /api/email-inbox/bulk-archive # Bulk archive emails
+GET    /api/email-inbox/[id]# Get email details
+PUT    /api/email-inbox/[id]# Update email status
 POST   /api/email-poll      # Trigger manual poll
 POST   /api/process-email   # AI classification & extraction
 POST   /api/enhanced-extract # Ensemble extraction with attachments
@@ -188,8 +201,8 @@ Pre-seeded with 40+ SA insurance company domain patterns:
 
 ```bash
 # Clone repository
-git clone https://github.com/Soft-Dynamix/stefco-claims-dashboard.git
-cd stefco-claims-dashboard
+git clone https://github.com/Soft-Dynamix/Stefco-dashboard-V2.git
+cd Stefco-dashboard-V2
 
 # Install dependencies
 bun install
@@ -292,6 +305,30 @@ EXPOSE 3000
 CMD ["bun", "run", "start"]
 ```
 
+## Recent Changes (v2.2.0)
+
+### New Features
+- **Bulk Email Operations**: Select multiple emails with checkboxes, archive/unarchive in bulk
+- **HTML Email Rendering**: Toggle between formatted HTML and plain text views
+- **AI Auto-fill**: Smart category and reason suggestions when ignoring emails
+- **Quoted-Printable Decoding**: Proper display of encoded email content
+
+### Improvements
+- Larger email dialog (95vw × 92vh) for better content visibility
+- Improved typography with sans-serif font and better spacing
+- Explicit close button in email dialog header
+
+### Bug Fixes
+- Fixed quoted-printable encoding artifacts (`=20`, `=A0`, etc.)
+- Fixed bulk archive API using wrong Prisma model
+- Fixed email HTML not rendering properly
+
+## Documentation
+
+- [CHANGELOG.md](./CHANGELOG.md) - Version history and release notes
+- [worklog.md](./worklog.md) - Detailed development history
+- [docs/API.md](./docs/API.md) - API endpoint documentation
+
 ## Security Considerations
 
 - All AI processing happens server-side
@@ -299,6 +336,7 @@ CMD ["bun", "run", "start"]
 - IMAP credentials stored encrypted in database
 - Audit logging for all actions
 - Input validation on all API endpoints
+- Sandboxed iframe for HTML email rendering
 
 ## License
 

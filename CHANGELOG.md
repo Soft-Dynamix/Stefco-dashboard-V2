@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-04-26
+
+### Added
+- **Bulk Email Operations** - Select and process multiple emails at once
+  - Checkbox selection in email table
+  - Select all functionality
+  - Bulk archive/unarchive operations
+  - Bulk action bar with selection count
+  - Visual highlighting for selected emails
+
+- **Email Body HTML Rendering** - Display original email formatting
+  - HTML/Text toggle for email body view
+  - Sandboxed iframe for secure HTML rendering
+  - Support for images, signatures, and formatted tables
+  - Proper rendering of invoices and complex emails
+
+- **AI Auto-fill for Ignore Modal** - Smart suggestions for rejection
+  - Automatic category detection based on email patterns
+  - Reason field pre-populated based on AI analysis
+  - "AI Suggested" badge indicator
+  - Subject pattern recognition (Re:, FWD:, follow-up detection)
+
+- **Quoted-Printable Email Decoding** - Proper email content display
+  - Backend decoding for newly polled emails
+  - Frontend fallback for existing emails
+  - Fixes `=20`, `=A0`, and other encoding artifacts
+
+### Changed
+- Email dialog now uses 95vw × 92vh for better content visibility
+- Email body text changed to sans-serif font for better readability
+- Improved line height and letter spacing for email content
+- Added explicit close button in email dialog header
+
+### Fixed
+- Email body showing raw quoted-printable encoding (`=20`, `=A0`, etc.)
+- Email HTML not rendering properly (tables, images, signatures)
+- Bulk archive API using wrong Prisma model name
+- Email dialog width being constrained by shadcn default classes
+
 ## [2.1.0] - 2025-04-26
 
 ### Added
@@ -106,23 +145,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 2.2.0 | 2025-04-26 | Bulk operations, HTML email rendering, AI auto-fill, encoding fixes |
 | 2.1.0 | 2025-04-26 | Archive system, pagination, auto-analysis |
 | 2.0.0 | 2025-04-25 | Complete redesign, AI pipeline, learning engine |
 | 1.0.0 | 2024-Q4 | Initial release |
 
 ## Upcoming Features (Roadmap)
 
-### v2.2.0 (Planned)
-- [ ] Bulk email operations (select multiple, bulk archive)
+### v2.3.0 (Planned)
 - [ ] Advanced search with date range filters
 - [ ] Email export to CSV/Excel
 - [ ] Dashboard widget customization
-
-### v2.3.0 (Planned)
 - [ ] Real-time notifications with WebSocket
+
+### v2.4.0 (Planned)
 - [ ] Email threading visualization
 - [ ] Advanced analytics charts
 - [ ] API rate limiting
+- [ ] Performance optimization
 
 ### v3.0.0 (Future)
 - [ ] Multi-tenant support
