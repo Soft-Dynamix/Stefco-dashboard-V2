@@ -17,7 +17,7 @@
 
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "./db";
-import { PDFParse } from "pdf-parse";
+import pdf from "pdf-parse";
 import { getClaimNumberFormatHint, getClaimNumberPatternsByDomain, validateClaimNumber } from "./claim-number-patterns";
 import { findAllPossibleVins, extractVehicleDetails } from "./extraction-patterns";
 
@@ -1102,8 +1102,7 @@ async function analyzePdfWithLlm(
   try {
     if (base64Content) {
       const pdfBuffer = Buffer.from(base64Content, 'base64');
-      const parser = new PDFParse();
-      const pdfData = await parser.parse(pdfBuffer);
+      const pdfData = await pdf(pdfBuffer);
       pdfText = pdfData.text || "";
       console.log(`[analyzePdfWithLlm] Extracted ${pdfText.length} chars of text from PDF`);
     }
