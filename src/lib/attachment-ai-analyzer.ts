@@ -728,9 +728,20 @@ export async function analyzeAttachment(
     // Prepare image URL for VLM
     let imageUrl = attachment.content || "";
     
+    // Skip analysis if no content provided
+    if (!imageUrl || imageUrl === "data:undefined;base64,undefined") {
+      console.log(`[attachment-analysis] Skipping ${attachment.filename} - no content provided`);
+      classification = {
+        documentType: "OTHER",
+        confidence: 0,
+        reasoning: "No content available for analysis",
+        isClaimRelated: false,
+        importance: "LOW"
+      };
+    }
     // If it's an image or PDF, use VLM for classification
-    if (fileType === "IMAGE" || fileType === "PDF") {
-      // Ensure we have a data URL
+    else if (fileType === "IMAGE" || fileType === "PDF") {
+      // Ensure we have a proper data URL
       if (imageUrl && !imageUrl.startsWith("data:")) {
         imageUrl = `data:${attachment.mimeType || 'image/jpeg'};base64,${imageUrl}`;
       }

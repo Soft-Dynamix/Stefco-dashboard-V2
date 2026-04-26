@@ -1345,10 +1345,11 @@ export function InboxSection() {
                                             body: JSON.stringify({
                                               action: 'analyze',
                                               emailId: selectedEmail.id,
-                                              attachments: attachments.map((a: { filename: string; contentType?: string; size?: number }) => ({
+                                              attachments: attachments.map((a: { filename: string; contentType?: string; size?: number; contentBase64?: string }) => ({
                                                 filename: a.filename,
                                                 mimeType: a.contentType,
                                                 size: a.size,
+                                                content: a.contentBase64 ? `data:${a.contentType || 'image/jpeg'};base64,${a.contentBase64}` : undefined,
                                               })),
                                               companyContext: selectedEmail.fromDomain,
                                             }),
