@@ -1032,7 +1032,7 @@ export function InboxSection() {
                 
                 {/* Tab Content with Scroll */}
                 <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
-                  <TabsContent value="content" className="mt-1 space-y-2" forceMount>
+                  <TabsContent value="content" className="mt-1 space-y-2">
                     {/* Email Body Card */}
                     <Card className="border">
                       <CardHeader className="py-2 px-3 bg-muted/30 border-b">
@@ -1079,7 +1079,7 @@ export function InboxSection() {
                     </div>
                   </TabsContent>
                   
-                  <TabsContent value="ai" className="mt-1 space-y-2" forceMount>
+                  <TabsContent value="ai" className="mt-1 space-y-2">
                     {/* AI Analysis - Two Column Layout */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                       {/* Left Column - Classification & Reasoning */}
@@ -1167,7 +1167,7 @@ export function InboxSection() {
                     </div>
                   </TabsContent>
                   
-                  <TabsContent value="actions" className="mt-1 space-y-2" forceMount>
+                  <TabsContent value="actions" className="mt-1 space-y-2">
                     {/* Follow-up warning */}
                     {isLikelyFollowUp(selectedEmail) && (
                       <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-md">
