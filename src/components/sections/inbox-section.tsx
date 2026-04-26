@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Mail,
   Search,
@@ -56,6 +57,7 @@ import {
   FileText,
   Archive,
   ArchiveRestore,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
@@ -109,6 +111,8 @@ export function InboxSection() {
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [isAnalyzingPending, setIsAnalyzingPending] = useState(false);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
+  const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -515,6 +519,74 @@ export function InboxSection() {
     );
   });
 
+  // Bulk selection handlers
+  const toggleEmailSelection = (emailId: string) => {
+    const newSelected = new Set(selectedEmailIds);
+    if (newSelected.has(emailId)) {
+      newSelected.delete(emailId);
+    } else {
+      newSelected.add(emailId);
+    }
+    setSelectedEmailIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEmailIds.size === filteredEmails.length) {
+      // Deselect all
+      setSelectedEmailIds(new Set());
+    } else {
+      // Select all filtered emails
+      setSelectedEmailIds(new Set(filteredEmails.map(e => e.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedEmailIds(new Set());
+  };
+
+  const bulkArchive = async (archive: boolean = true) => {
+    if (selectedEmailIds.size === 0) return;
+    
+    setIsBulkArchiving(true);
+    const action = archive ? "archive" : "unarchive";
+    toast({
+      title: `Bulk ${action} started`,
+      description: `${archive ? "Archiving" : "Unarchiving"} ${selectedEmailIds.size} emails...`,
+    });
+
+    try {
+      const res = await fetch("/api/email-inbox/bulk-archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailIds: Array.from(selectedEmailIds),
+          status: archive ? "ARCHIVED" : "PENDING",
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        toast({
+          title: archive ? "Emails Archived" : "Emails Unarchived",
+          description: `Successfully ${archive ? "archived" : "unarchived"} ${json.updated} emails.`,
+        });
+        setSelectedEmailIds(new Set());
+        fetchEmails(pagination.page);
+      } else {
+        throw new Error(json.error || `Failed to ${action} emails`);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : `Failed to ${action} emails`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkArchiving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -723,12 +795,77 @@ export function InboxSection() {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedEmailIds.size > 0 && (
+        <Card className="border-primary/50 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge variant="secondary" className="text-sm">
+                  {selectedEmailIds.size} selected
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {selectedEmailIds.size === 1 ? "email" : "emails"} selected
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {statusFilter !== "ARCHIVED" && (
+                  <Button
+                    size="sm"
+                    onClick={() => bulkArchive(true)}
+                    disabled={isBulkArchiving}
+                  >
+                    {isBulkArchiving ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Archive className="h-4 w-4 mr-2" />
+                    )}
+                    Archive Selected
+                  </Button>
+                )}
+                {statusFilter === "ARCHIVED" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => bulkArchive(false)}
+                    disabled={isBulkArchiving}
+                  >
+                    {isBulkArchiving ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ArchiveRestore className="h-4 w-4 mr-2" />
+                    )}
+                    Unarchive Selected
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearSelection}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Email List */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    className="h-4 w-4 cursor-pointer"
+                    checked={filteredEmails.length > 0 && selectedEmailIds.size === filteredEmails.length}
+                    onCheckedChange={toggleSelectAll}
+                    title="Select all"
+                  />
+                </TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>From</TableHead>
                 <TableHead>AI Classification</TableHead>
@@ -741,7 +878,7 @@ export function InboxSection() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                     </div>
@@ -749,7 +886,7 @@ export function InboxSection() {
                 </TableRow>
               ) : filteredEmails.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     {statusFilter === "PENDING"
                       ? "No pending emails. Click \"Test Email\" on the Dashboard to generate test emails, or \"Poll Emails Now\" to fetch from IMAP."
                       : statusFilter === "all"
@@ -759,7 +896,14 @@ export function InboxSection() {
                 </TableRow>
               ) : (
                 filteredEmails.map((email) => (
-                  <TableRow key={email.id}>
+                  <TableRow key={email.id} className={selectedEmailIds.has(email.id) ? "bg-primary/5" : ""}>
+                    <TableCell className="w-12">
+                      <Checkbox
+                        className="h-4 w-4 cursor-pointer"
+                        checked={selectedEmailIds.has(email.id)}
+                        onCheckedChange={() => toggleEmailSelection(email.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium max-w-[200px]">
                       <div className="flex items-center gap-2">
                         {isLikelyFollowUp(email) && (

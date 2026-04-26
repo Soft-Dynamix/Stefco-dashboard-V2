@@ -820,3 +820,56 @@ gh repo push Soft-Dynamix/Stefco-dashboard-V2
 ---
 
 *This worklog documents the complete development history of the STEFCO Claims Dashboard V2 project.*
+
+---
+Task ID: 41
+Agent: Main Agent
+Task: Add Bulk Archive Functionality to Email Inbox
+
+Work Log:
+- Added bulk selection functionality with checkboxes in email table
+- Added select all checkbox in table header
+- Added bulk action bar that appears when emails are selected
+- Added bulk archive/unarchive buttons based on current status filter
+- Created bulk archive API endpoint at /api/email-inbox/bulk-archive
+- Added visual highlighting for selected rows
+- Added clear selection button
+
+Stage Summary:
+- Users can now select multiple emails at once using checkboxes
+- "Select All" checkbox to quickly select all visible emails
+- Bulk action bar shows count of selected emails
+- Archive/Unarchive multiple emails with single click
+- Visual feedback with row highlighting for selected emails
+- Toast notifications for bulk operations
+
+Files Created:
+- src/app/api/email-inbox/bulk-archive/route.ts - Bulk archive API endpoint
+
+Files Modified:
+- src/components/sections/inbox-section.tsx - Added bulk selection and bulk action bar
+
+UI Features Added:
+- Checkbox column in email table (first column)
+- Select all checkbox in table header
+- Bulk action bar (appears when emails selected)
+  - Shows "X selected" count
+  - "Archive Selected" button (when not viewing archived)
+  - "Unarchive Selected" button (when viewing archived)
+  - "Clear" button to deselect all
+- Row highlighting for selected emails (bg-primary/5)
+- Loading spinner during bulk operations
+
+API Endpoint Created:
+POST /api/email-inbox/bulk-archive
+- Request: { emailIds: string[], status: "ARCHIVED" | "PENDING" }
+- Response: { success: boolean, updated: number, message: string }
+- Updates multiple emails' status in a single transaction
+
+Benefits:
+- Quickly clean up inbox by archiving multiple processed emails
+- Restore multiple archived emails at once
+- Efficient batch operations for email management
+- Reduces repetitive individual archive actions
+
+---
