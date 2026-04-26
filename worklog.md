@@ -1776,3 +1776,69 @@ Documentation Contents:
 GitHub Repository:
 - https://github.com/Soft-Dynamix/Stefco-dashboard-V2
 - All commits pushed successfully
+
+---
+
+Task ID: 48
+Agent: Main Agent
+Task: Improve Vehicle Details and VIN/Chassis Extraction from Documents
+
+Work Log:
+- User reported vehicle details and chassis numbers not being extracted from documents (quotations, etc.)
+- Identified multiple issues with the AI document analysis:
+  1. PDF text was truncated to 8000 chars - missing important vehicle details
+  2. VIN/Chassis pattern matching was too strict
+  3. AI prompts weren't comprehensive enough for vehicle detail extraction
+  4. No post-processing to catch details the LLM might miss
+- Increased PDF text extraction limit from 8000 to 20000 characters
+- Added comprehensive VIN/Chassis extraction patterns:
+  - Labeled patterns: "VIN", "Chassis No", "Chassis Number", "Vehicle ID"
+  - Standalone patterns: Any 17-char alphanumeric sequence (no I, O, Q)
+  - Fallback aggressive search for any VIN-like sequences
+- Created findAllPossibleVins() helper function to scan text for all potential VINs
+- Created extractVehicleDetails() helper function to extract make, model, year, color, engine number
+- Enhanced AI prompts with detailed instructions for each document type:
+  - Quotations: VIN/Chassis (critical), Registration, Make, Model, Year, Color, Engine Number
+  - Claim Forms: All vehicle details plus incident info
+  - Policy Schedules: All vehicle details plus coverage info
+  - Vehicle Assessments: All vehicle identification
+- Added post-processing step after LLM analysis to catch VINs that AI might have missed
+- Added engineNumber field to extraction and policy data
+
+Stage Summary:
+- Vehicle details now extracted more comprehensively from all document types
+- VIN/Chassis numbers found even without explicit labels in documents
+- Multiple fallback patterns ensure no VIN is missed
+- AI prompts now explicitly list what to look for
+- Post-processing catches details the LLM might have overlooked
+- Engine number extraction added
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts:
+  - Increased text limit from 8000 to 20000 chars
+  - Added import for extraction helper functions
+  - Enhanced AI prompt with detailed extraction instructions per document type
+  - Added engineNumber to extracted fields
+  - Added post-processing step using findAllPossibleVins() and extractVehicleDetails()
+  - Added logging for post-processing findings
+
+- src/lib/extraction-patterns.ts:
+  - Added findAllPossibleVins() function - scans for all 17-char VIN sequences
+  - Added extractVehicleDetails() function - extracts make, model, year, color, engine number
+  - Enhanced fallbackExtraction() with multiple VIN pattern attempts
+  - Added "engineNumber" to ExtractableField type
+  - Added aggressive fallback search for VINs without labels
+
+VIN/Chassis Extraction Strategy:
+1. Try labeled patterns first (VIN, Chassis No, etc.)
+2. Try standalone 17-char alphanumeric patterns
+3. Last resort: find all VIN-like sequences anywhere in text
+4. Post-process with helper functions to catch missed details
+
+Vehicle Details Extraction:
+- 35+ common vehicle makes recognized (Toyota, VW, BMW, etc.)
+- Year extraction (1990-current year + 1)
+- Engine number patterns (6-12 alphanumeric chars)
+- 16 common colors recognized
+
+This ensures that even if the LLM misses vehicle details, the post-processing will catch them from the extracted PDF text.

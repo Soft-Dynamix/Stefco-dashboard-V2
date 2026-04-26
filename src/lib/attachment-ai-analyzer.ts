@@ -19,6 +19,7 @@ import ZAI from "z-ai-web-dev-sdk";
 import { db } from "./db";
 import { PDFParse } from "pdf-parse";
 import { getClaimNumberFormatHint, getClaimNumberPatternsByDomain, validateClaimNumber } from "./claim-number-patterns";
+import { findAllPossibleVins, extractVehicleDetails } from "./extraction-patterns";
 
 // Cache ZAI instance
 let zaiInstance: ZAI | null = null;
@@ -1111,7 +1112,8 @@ async function analyzePdfWithLlm(
   }
   
   // Truncate text if too long (LLM has token limits)
-  const maxTextLength = 8000;
+  // Increased limit to capture more vehicle details from documents
+  const maxTextLength = 20000;
   const truncatedText = pdfText.length > maxTextLength 
     ? pdfText.substring(0, maxTextLength) + "\n...[truncated]" 
     : pdfText;
@@ -1131,15 +1133,32 @@ ${truncatedText}
 === DOCUMENT-TYPE-SPECIFIC EXTRACTION ===
 
 **IF THIS IS A QUOTATION:**
-- Extract VIN NUMBER (Vehicle Identification Number) or CHASSIS NUMBER - critical for matching vehicle
-- Extract REGISTRATION NUMBER - identifies the vehicle on policy
-- Extract vehicle details: make, model, year, color
+- Extract VIN NUMBER (Vehicle Identification Number) or CHASSIS NUMBER - THIS IS CRITICAL
+  * Look for: "VIN", "Vin", "VIN No", "VIN Number", "Chassis", "Chassis No", "Chassis Number", "Vehicle ID"
+  * VINs are always 17 characters (letters and numbers, no I, O, Q)
+  * Example: MNJZK4AZ3LM123456
+- Extract REGISTRATION NUMBER - THIS IS CRITICAL
+  * Look for: "Reg", "Reg No", "Registration", "Vehicle Reg", "VRM"
+  * SA format: XX XX GP, XX-XX-GP, XXXXXX GP, or similar
+- Extract ALL vehicle details:
+  * MAKE (Toyota, VW, BMW, Mercedes, Ford, etc.)
+  * MODEL (Corolla, Polo, X3, C-Class, Ranger, etc.)
+  * YEAR or Year of Manufacture
+  * COLOR
+  * ENGINE NUMBER (if present)
+  * ODOMETER reading (if present)
+- Extract CLIENT/CUSTOMER name and contact details
+- Extract QUOTATION number, QUOTE date
+- Extract PREMIUM amount, EXCESS amount
+- Extract SUM INSURED / Insured Value
+- Extract any VEHICLE EXTRAS or ACCESSORIES listed
 
 **IF THIS IS A CLAIM FORM:**
 - Extract INCIDENT DATE (date of accident/event)
 - Extract INCIDENT LOCATION and DESCRIPTION
 - Extract DRIVER DETAILS if different from policy holder
 - Extract THIRD PARTY DETAILS if applicable
+- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color)
 
 **IF THIS IS A POLICY SCHEDULE:**
 - Extract SUM INSURED amount
@@ -1147,10 +1166,26 @@ ${truncatedText}
 - Extract VEHICLE EXTRAS / SPECIFIED ITEMS
 - Extract BENEFITS and EXTENSIONS
 - Extract PREMIUM amount
+- Extract ALL vehicle details (VIN, Reg, Make, Model, Year, Color, Engine Number)
 
 **IF THIS IS A POLICE REPORT:**
 - Extract CASE NUMBER (CAS number)
 - Extract incident date and location
+- Extract ALL vehicle details involved
+
+**IF THIS IS A VEHICLE ASSESSMENT or REPAIR QUOTE:**
+- Extract ALL vehicle identification (VIN, Reg, Make, Model, Year)
+- Extract damage description
+- Extract repair costs/estimates
+
+=== CRITICAL EXTRACTION RULES ===
+1. VIN/CHASSIS NUMBERS: Must be exactly 17 alphanumeric characters (no I, O, Q)
+   - Search the ENTIRE document for any 17-character sequence matching [A-HJ-NPR-Z0-9]{17}
+   - These often appear in tables, vehicle details sections, or fine print
+2. VEHICLE REGISTRATIONS: Look for South African formats throughout the document
+   - Common patterns: "BJ 51 NW GP", "BJ51NWGP", "CA 123 456", etc.
+3. DO NOT SKIP any section - scan tables, headers, footers, fine print
+4. If a value has multiple labels (e.g., "Chassis No" vs "VIN"), still extract it
 
 Your tasks:
 1. Classify the document type
@@ -1173,8 +1208,10 @@ Respond in JSON format:
   "keyFindings": {
     "claimNumber": "found or null",
     "policyNumber": "found or null",
+    "quotationNumber": "found or null",
     "vehicleRegistration": "found or null",
-    "vehicleVinNumber": "17-char VIN/Chassis Number or null",
+    "vehicleVinNumber": "17-char VIN/Chassis Number or null - EXTRACT THIS EVEN IF IT'S HIDDEN IN A TABLE",
+    "engineNumber": "found or null",
     "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
     "incidentDate": "YYYY-MM-DD or null",
     "incidentTime": "HH:MM or null",
@@ -1188,11 +1225,13 @@ Respond in JSON format:
     "driverIdNumber": "found or null",
     "thirdPartyName": "found or null",
     "thirdPartyVehicleReg": "found or null",
-    "vehicleMake": "found or null",
-    "vehicleModel": "found or null",
+    "vehicleMake": "found or null - e.g., Toyota, VW, BMW",
+    "vehicleModel": "found or null - e.g., Corolla, Polo",
     "vehicleYear": "found or null",
     "vehicleColor": "found or null",
+    "vehicleExtras": ["list of any vehicle extras/accessories found"],
     "insuredName": "found or null",
+    "clientName": "for quotations - the customer/client name",
     "sumInsured": number or null,
     "excess": number or null,
     "premium": number or null,
@@ -1201,6 +1240,7 @@ Respond in JSON format:
     "specifiedItems": ["list of specified/extras items"],
     "inceptionDate": "YYYY-MM-DD or null",
     "expiryDate": "YYYY-MM-DD or null",
+    "quotationDate": "YYYY-MM-DD or null",
     "policeCaseNumber": "CAS number or null"
   },
   "extractedText": "key text snippets from the document",
@@ -1279,6 +1319,7 @@ Respond in JSON format:
           vehicleYear: findings.vehicleYear ? parseInt(findings.vehicleYear) : null,
           vehicleColor: findings.vehicleColor || null,
           vehicleVinNumber: findings.vehicleVinNumber || null,
+          engineNumber: findings.engineNumber || null,
           sumInsured: findings.sumInsured || null,
           excess: findings.excess || null,
           premium: findings.premium || null,
@@ -1289,6 +1330,68 @@ Respond in JSON format:
           extractionConfidence: classification.confidence,
           extractedFields: Object.keys(findings).filter(k => findings[k] !== null && findings[k] !== undefined)
         };
+      }
+      
+      // POST-PROCESSING: Use helper functions to find VINs and vehicle details that LLM might have missed
+      if (pdfText) {
+        // Find all possible VINs in the extracted text
+        const foundVins = findAllPossibleVins(pdfText);
+        if (foundVins.length > 0) {
+          // If LLM didn't find a VIN, use the first one found
+          const vinToUse = foundVins[0];
+          if (!findings.vehicleVinNumber) {
+            console.log(`[analyzePdfWithLlm] Post-processing found VIN: ${vinToUse} (LLM missed it)`);
+            if (claimData) {
+              claimData.vehicleVinNumber = vinToUse;
+              claimData.extractedFields.push('vehicleVinNumber');
+            }
+            if (policyData) {
+              policyData.vehicleVinNumber = vinToUse;
+              policyData.extractedFields.push('vehicleVinNumber');
+            }
+          } else {
+            console.log(`[analyzePdfWithLlm] LLM found VIN: ${findings.vehicleVinNumber}, also found: ${foundVins.join(', ')}`);
+          }
+        }
+        
+        // Extract additional vehicle details if missing
+        const vehicleDetails = extractVehicleDetails(pdfText);
+        if (policyData) {
+          if (!policyData.vehicleMake && vehicleDetails.make) {
+            console.log(`[analyzePdfWithLlm] Post-processing found vehicle make: ${vehicleDetails.make}`);
+            policyData.vehicleMake = vehicleDetails.make;
+            policyData.extractedFields.push('vehicleMake');
+          }
+          if (!policyData.vehicleYear && vehicleDetails.year) {
+            console.log(`[analyzePdfWithLlm] Post-processing found vehicle year: ${vehicleDetails.year}`);
+            policyData.vehicleYear = parseInt(vehicleDetails.year);
+            policyData.extractedFields.push('vehicleYear');
+          }
+          if (!policyData.vehicleColor && vehicleDetails.color) {
+            console.log(`[analyzePdfWithLlm] Post-processing found vehicle color: ${vehicleDetails.color}`);
+            policyData.vehicleColor = vehicleDetails.color;
+            policyData.extractedFields.push('vehicleColor');
+          }
+          if (!policyData.engineNumber && vehicleDetails.engineNumber) {
+            console.log(`[analyzePdfWithLlm] Post-processing found engine number: ${vehicleDetails.engineNumber}`);
+            policyData.engineNumber = vehicleDetails.engineNumber;
+            policyData.extractedFields.push('engineNumber');
+          }
+        }
+        if (claimData) {
+          if (!claimData.vehicleMake && vehicleDetails.make) {
+            claimData.vehicleMake = vehicleDetails.make;
+            claimData.extractedFields.push('vehicleMake');
+          }
+          if (!claimData.vehicleYear && vehicleDetails.year) {
+            claimData.vehicleYear = vehicleDetails.year;
+            claimData.extractedFields.push('vehicleYear');
+          }
+          if (!claimData.vehicleColor && vehicleDetails.color) {
+            claimData.vehicleColor = vehicleDetails.color;
+            claimData.extractedFields.push('vehicleColor');
+          }
+        }
       }
       
       console.log(`[analyzePdfWithLlm] Classified ${fileName} as ${classification.documentType} (confidence: ${classification.confidence}%)`);

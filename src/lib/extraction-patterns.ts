@@ -11,11 +11,114 @@ export type ExtractableField =
   | "vehicleVinNumber"
   | "vehicleMake"
   | "vehicleModel"
+  | "vehicleYear"
+  | "vehicleColor"
+  | "engineNumber"
   | "propertyAddress"
   | "excessAmount"
   | "incidentDate"
   | "incidentDescription"
   | "claimType";
+
+/**
+ * Aggressively scan text for any VIN/Chassis number patterns
+ * This function finds ALL potential VINs in text, even without labels
+ */
+export function findAllPossibleVins(text: string): string[] {
+  const vins: string[] = [];
+  
+  // Pattern 1: With labels (higher priority)
+  const labeledPattern = /(?:VIN|Vin|vin|CHASSIS|Chassis|chassis|Vehicle\s*ID)\s*(?:No|Number|#|Nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi;
+  let match;
+  while ((match = labeledPattern.exec(text)) !== null) {
+    if (match[1] && !vins.includes(match[1].toUpperCase())) {
+      vins.push(match[1].toUpperCase());
+    }
+  }
+  
+  // Pattern 2: Standalone 17-char alphanumeric sequences (lower priority)
+  const standalonePattern = /\b([A-HJ-NPR-Z0-9]{17})\b/g;
+  while ((match = standalonePattern.exec(text)) !== null) {
+    if (match[1] && !vins.includes(match[1].toUpperCase())) {
+      vins.push(match[1].toUpperCase());
+    }
+  }
+  
+  return vins;
+}
+
+/**
+ * Extract vehicle details from text (make, model, year, etc.)
+ */
+export function extractVehicleDetails(text: string): {
+  make: string | null;
+  model: string | null;
+  year: string | null;
+  color: string | null;
+  engineNumber: string | null;
+} {
+  const result = {
+    make: null as string | null,
+    model: null as string | null,
+    year: null as string | null,
+    color: null as string | null,
+    engineNumber: null as string | null,
+  };
+  
+  // Common vehicle makes
+  const makes = [
+    "Toyota", "Volkswagen", "VW", "BMW", "Mercedes", "Mercedes-Benz", "Ford",
+    "Honda", "Nissan", "Mazda", "Hyundai", "Kia", "Audi", "Volvo", "Lexus",
+    "Isuzu", "Mitsubishi", "Subaru", "Suzuki", "Renault", "Peugeot", "Jeep",
+    "Land Rover", "Jaguar", "Porsche", "Mini", "Fiat", "Chevrolet", "Opel",
+    "Chery", "Haval", "GWM", "Mahindra"
+  ];
+  
+  // Try to find make
+  for (const make of makes) {
+    const makePattern = new RegExp(`\\b(${make})\\b`, "i");
+    if (makePattern.test(text)) {
+      result.make = make;
+      break;
+    }
+  }
+  
+  // Try to find year (4 digits between 1990 and current year + 1)
+  const currentYear = new Date().getFullYear();
+  const yearPattern = /\b((?:19[89]\d|20[0-2]\d))\b/g;
+  const yearMatches = text.match(yearPattern);
+  if (yearMatches) {
+    for (const y of yearMatches) {
+      const yearNum = parseInt(y);
+      if (yearNum >= 1990 && yearNum <= currentYear + 1) {
+        result.year = y;
+        break;
+      }
+    }
+  }
+  
+  // Try to find engine number (usually alphanumeric, 6-12 chars)
+  const enginePattern = /(?:Engine|Eng)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-Z0-9]{6,12})/i;
+  const engineMatch = text.match(enginePattern);
+  if (engineMatch) {
+    result.engineNumber = engineMatch[1].toUpperCase();
+  }
+  
+  // Try to find color
+  const colors = [
+    "White", "Black", "Silver", "Grey", "Gray", "Blue", "Red", "Green",
+    "Yellow", "Gold", "Bronze", "Brown", "Beige", "Orange", "Purple", "Maroon"
+  ];
+  for (const color of colors) {
+    const colorPattern = new RegExp(`\\b${color}\\b`, "i");
+    if (colorPattern.test(text)) {
+      result.color = color;
+      break;
+    }
+  }
+  
+  return result;
+}
 
 // Extraction result
 export interface ExtractionResult {
@@ -342,7 +445,8 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
       description: "SA vehicle registration pattern",
     },
     vehicleVinNumber: {
-      pattern: /(?:vin|chassis)\s*(?:no|number|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
+      // Try multiple VIN patterns - first with label, then standalone
+      pattern: /(?:vin|chassis)\s*(?:no|number|#|nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
       description: "VIN/Chassis number pattern (17 alphanumeric characters)",
     },
     excessAmount: {
@@ -362,6 +466,43 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
         pattern: fallback.pattern.source,
         source: "fallback",
       };
+    }
+    
+    // For VIN, try alternative patterns if labeled pattern didn't match
+    if (fieldType === "vehicleVinNumber") {
+      // Try to find any standalone 17-character VIN-like sequence
+      const vinPatterns = [
+        // Pattern with various labels
+        /(?:VIN|Vin|vin|CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
+        // Standalone VIN in text (must be word-bounded)
+        /\b([A-HJ-NPR-Z0-9]{17})\b/g,
+      ];
+      
+      for (const vPattern of vinPatterns) {
+        const vMatch = text.match(vPattern);
+        if (vMatch && vMatch[1]) {
+          return {
+            field: fieldType,
+            value: vMatch[1].trim().toUpperCase(),
+            confidence: 40, // Slightly lower confidence for unlabeled VINs
+            pattern: vPattern.source,
+            source: "fallback_alt",
+          };
+        }
+      }
+      
+      // Last resort: find ALL 17-char alphanumeric sequences and return the most likely VIN
+      const allPossibleVins = text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/g);
+      if (allPossibleVins && allPossibleVins.length > 0) {
+        // Return the first one found
+        return {
+          field: fieldType,
+          value: allPossibleVins[0].toUpperCase(),
+          confidence: 30,
+          pattern: "\\b[A-HJ-NPR-Z0-9]{17}\\b",
+          source: "fallback_aggressive",
+        };
+      }
     }
   }
 
