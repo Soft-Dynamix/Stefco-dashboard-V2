@@ -387,3 +387,29 @@ Stage Summary:
 - No more "Analysis Response Error" toasts from malformed JSON
 - Lint check passes (1 pre-existing warning about image alt prop)
 - Dev server running correctly
+
+---
+Task ID: 13b
+Agent: Main Agent
+Task: Additional fix for JSON parsing errors in frontend
+
+Work Log:
+- **Issue**: "Analysis Response Error" toast still appearing after initial fix
+  - Error detection logic wasn't catching all JSON parse error variants
+  - `fetchAttachmentAnalysis` used direct `JSON.parse()` on keyIndicators and missingInformation
+- **Fixes Applied**:
+  1. Improved error detection in re-analyze button (line 1692-1696):
+     - Added `errorMsg.includes('SyntaxError')` to catch SyntaxError messages
+     - Added `errorMsg.includes('Unexpected')` to catch "Unexpected token" messages
+  2. Fixed `fetchAttachmentAnalysis` function (lines 461-475):
+     - Wrapped `JSON.parse()` calls in try-catch blocks
+     - If parsing fails, check if data is already an array and return it
+     - Otherwise return empty array
+
+Stage Summary:
+- Frontend JSON parsing is now robust:
+  - Catches all JSON parse error variants (parse, JSON, Expected, SyntaxError, Unexpected)
+  - Gracefully handles malformed data from database
+- Both backend and frontend now have robust JSON error handling
+- Lint check passes (1 pre-existing warning about image alt prop)
+- Dev server running correctly

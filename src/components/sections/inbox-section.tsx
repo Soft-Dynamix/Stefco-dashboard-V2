@@ -458,8 +458,21 @@ export function InboxSection() {
             isLikelyNewClaim: json.summary.isLikelyNewClaim,
             confidenceLevel: json.summary.confidenceLevel,
             assessmentReason: json.summary.assessmentReason,
-            keyIndicators: json.summary.keyIndicators ? JSON.parse(json.summary.keyIndicators) : [],
-            missingInformation: json.summary.missingInformation ? JSON.parse(json.summary.missingInformation) : [],
+            keyIndicators: (() => {
+              try {
+                return json.summary.keyIndicators ? JSON.parse(json.summary.keyIndicators) : [];
+              } catch {
+                // If already an array, return as-is; otherwise return empty
+                return Array.isArray(json.summary.keyIndicators) ? json.summary.keyIndicators : [];
+              }
+            })(),
+            missingInformation: (() => {
+              try {
+                return json.summary.missingInformation ? JSON.parse(json.summary.missingInformation) : [];
+              } catch {
+                return Array.isArray(json.summary.missingInformation) ? json.summary.missingInformation : [];
+              }
+            })(),
           } : null,
           analyses: json.analyses || []
         });
@@ -1676,7 +1689,11 @@ export function InboxSection() {
                                           // Check for rate limiting or JSON parsing errors
                                           const errorMsg = String(error);
                                           const isRateLimited = errorMsg.includes('429') || errorMsg.includes('Too many requests') || errorMsg.includes('rate limit');
-                                          const isParseError = errorMsg.includes('parse') || errorMsg.includes('JSON') || errorMsg.includes('Expected');
+                                          const isParseError = errorMsg.includes('parse') ||
+                                                               errorMsg.includes('JSON') ||
+                                                               errorMsg.includes('Expected') ||
+                                                               errorMsg.includes('SyntaxError') ||
+                                                               errorMsg.includes('Unexpected');
                                           toast({
                                             title: isRateLimited ? "Rate Limited" : isParseError ? "Analysis Response Error" : "Analysis Failed",
                                             description: isRateLimited
