@@ -78,6 +78,8 @@ async function withRetry<T>(
  * - Unquoted property names
  * - Comments in JSON
  * - Missing closing braces
+ * - Single quotes instead of double quotes
+ * - Missing commas between properties
  */
 function parseJsonRobustly(text: string): unknown {
   // First try direct parse
@@ -87,8 +89,14 @@ function parseJsonRobustly(text: string): unknown {
     // Continue to more robust parsing
   }
 
-  // Try to fix common issues
+  // Try to extract JSON from markdown code blocks
   let cleaned = text;
+
+  // Extract from ```json ... ``` blocks
+  const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    cleaned = jsonBlockMatch[1].trim();
+  }
 
   // Remove JavaScript-style comments
   cleaned = cleaned.replace(/\/\/.*$/gm, '');
@@ -97,9 +105,15 @@ function parseJsonRobustly(text: string): unknown {
   // Remove trailing commas before } or ]
   cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
 
-  // Try to fix unquoted property names
-  // This regex looks for property names that aren't quoted
+  // Try to fix unquoted property names - more aggressive pattern
+  // Matches: {name: or ,name: and adds quotes
   cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+  // Fix single quotes to double quotes (but be careful with apostrophes in strings)
+  // This is a simple approach - replace 'string': with "string":
+  cleaned = cleaned.replace(/'([^']+)'\s*:/g, '"$1":');
+  // And : 'value' with : "value"
+  cleaned = cleaned.replace(/:\s*'([^']*)'/g, ': "$1"');
 
   // Try parsing again
   try {
@@ -108,12 +122,14 @@ function parseJsonRobustly(text: string): unknown {
     // Continue to extraction
   }
 
-  // Try to extract valid JSON object using balanced bracket counting
+  // More aggressive fixes
+  // Try to find the JSON object boundaries
   const firstBrace = cleaned.indexOf('{');
   if (firstBrace === -1) {
     throw new Error('No JSON object found in response');
   }
 
+  // Extract the JSON using balanced bracket counting
   let depth = 0;
   let inString = false;
   let escapeNext = false;
@@ -132,7 +148,7 @@ function parseJsonRobustly(text: string): unknown {
       continue;
     }
 
-    if (char === '"' && !escapeNext) {
+    if ((char === '"' || char === "'") && !escapeNext) {
       inString = !inString;
       continue;
     }
@@ -150,20 +166,58 @@ function parseJsonRobustly(text: string): unknown {
     }
   }
 
-  const extracted = cleaned.substring(firstBrace, lastValidEnd);
+  let extracted = cleaned.substring(firstBrace, lastValidEnd);
 
-  // Final attempt with cleaned extracted JSON
+  // Apply fixes to extracted portion
+  extracted = extracted.replace(/,(\s*[}\]])/g, '$1');
+  extracted = extracted.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+  // Try parsing
   try {
     return JSON.parse(extracted);
-  } catch (e) {
-    // Last resort: try fixing the extracted portion
-    const finalAttempt = extracted.replace(/,(\s*[}\]])/g, '$1');
-    try {
-      return JSON.parse(finalAttempt);
-    } catch {
-      throw new Error(`Failed to parse JSON: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  } catch {
+    // Continue with more aggressive fixes
   }
+
+  // Try fixing common issues with string values containing special chars
+  // Escape unescaped quotes within strings (this is tricky)
+  try {
+    // Try to use a JSON repair library approach manually
+    const repaired = repairJson(extracted);
+    return JSON.parse(repaired);
+  } catch {
+    // Give up and throw
+    throw new Error(`Failed to parse JSON after multiple repair attempts. First 200 chars: ${extracted.substring(0, 200)}`);
+  }
+}
+
+/**
+ * Attempt to repair common JSON issues
+ */
+function repairJson(json: string): string {
+  let result = json;
+
+  // Remove trailing commas
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+
+  // Fix missing commas between properties (detect: "value" "key":)
+  result = result.replace(/("\s*)(")(\s*[a-zA-Z_])/g, '$1,$2$3');
+
+  // Fix unquoted property names
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+  // Fix NaN, Infinity, -Infinity
+  result = result.replace(/:\s*NaN\s*([,}\]])/g, ': null$1');
+  result = result.replace(/:\s*Infinity\s*([,}\]])/g, ': null$1');
+  result = result.replace(/:\s*-Infinity\s*([,}\]])/g, ': null$1');
+
+  // Fix undefined
+  result = result.replace(/:\s*undefined\s*([,}\]])/g, ': null$1');
+
+  // Fix empty strings that should be null
+  // (not doing this as it might break valid empty strings)
+
+  return result;
 }
 
 // =============================================================================
@@ -2106,6 +2160,9 @@ export interface UnifiedAnalysisResult {
   overallClaimLikelihood: number;
   isReadyForProcessing: boolean;
   recommendedAction: "CREATE_CLAIM" | "REQUEST_INFO" | "MANUAL_REVIEW" | "IGNORE";
+
+  // Optional raw content for debugging when JSON parsing fails
+  rawContent?: string;
 }
 
 /**
@@ -2405,13 +2462,98 @@ Respond in JSON format:
     const content = response.choices?.[0]?.message?.content || "";
 
     // Use robust JSON parsing to handle malformed LLM responses
-    let parsed: Record<string, unknown>;
+    let parsed: Record<string, unknown> | null = null;
     try {
       parsed = parseJsonRobustly(content) as Record<string, unknown>;
     } catch (parseError) {
       console.error("[unified-analysis] JSON parse error:", parseError);
       console.error("[unified-analysis] Raw content (first 500 chars):", content.substring(0, 500));
-      throw new Error(`Failed to parse AI response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+
+      // Instead of throwing, try to extract basic info from the raw text
+      // This provides a fallback when JSON parsing fails
+      const classification = content.includes('NEW_CLAIM') ? 'NEW_CLAIM' :
+                            content.includes('IGNORE') ? 'IGNORE' :
+                            content.includes('EXISTING_CLAIM') ? 'EXISTING_CLAIM' : 'OTHER';
+
+      // Extract any claim numbers, policy numbers, vehicle reg from raw text
+      const claimNumberMatch = content.match(/(?:claim\s*(?:number|no|#)?)\s*[:\s]*([A-Z0-9\-\/]+)/i);
+      const policyNumberMatch = content.match(/(?:policy\s*(?:number|no|#)?)\s*[:\s]*([A-Z0-9\-]+)/i);
+      const vehicleRegMatch = content.match(/(?:registration|reg)\s*(?:number|no)?\s*[:\s]*([A-Z]{2,3}[0-9]{2,3}[A-Z]{0,2}|[A-Z0-9]{6,8})/i);
+
+      // Return a partial result with what we could extract
+      const fallbackResult: UnifiedAnalysisResult = {
+        classification: classification as "NEW_CLAIM" | "EXISTING_CLAIM" | "OTHER" | "IGNORE",
+        confidence: 30, // Low confidence since we couldn't parse properly
+        reasoning: "AI response could not be parsed correctly. Partial extraction from raw text.",
+        claimTypeIdentified: "OTHER",
+        claimTypeReasoning: "Unable to determine from malformed response",
+        extractedData: {
+          claimNumber: claimNumberMatch?.[1] || null,
+          policyNumber: policyNumberMatch?.[1] || null,
+          claimType: null,
+          incidentDate: null,
+          incidentTime: null,
+          incidentLocation: null,
+          incidentDescription: null,
+          clientName: null,
+          clientIdNumber: null,
+          clientPhone: null,
+          clientEmail: null,
+          clientAddress: null,
+          insuranceCompany: null,
+          policyInceptionDate: null,
+          policyExpiryDate: null,
+          policeCaseNumber: null,
+          vehicleRegistration: vehicleRegMatch?.[1] || null,
+          vehicleMake: null,
+          vehicleModel: null,
+          vehicleYear: null,
+          vehicleColor: null,
+          vehicleVinNumber: null,
+          driverName: null,
+          driverIdNumber: null,
+          thirdPartyName: null,
+          thirdPartyVehicleReg: null,
+          excessAmount: null,
+          estimatedDamage: null,
+          sumInsured: null,
+          premium: null,
+          benefits: [],
+          extensions: [],
+          specifiedItems: [],
+          propertyAddress: null,
+          propertyType: null,
+          damageDescription: null,
+          estimatedValue: null,
+          stolenItems: [],
+          dateOfDiscovery: null,
+          securityMeasures: null,
+          witnessNames: [],
+          injuriesReported: null,
+          fireReportNumber: null,
+          causeOfFire: null,
+          extentOfDamage: null,
+        },
+        dataSources: {},
+        keyIndicators: [],
+        missingInformation: ["AI response parsing failed - manual review required"],
+        overallClaimLikelihood: classification === 'NEW_CLAIM' ? 40 : 10,
+        recommendedAction: "MANUAL_REVIEW",
+        documentsAnalyzed: {
+          emailBody: true,
+          attachments: attachments.map(a => ({
+            fileName: a.filename,
+            documentType: "OTHER" as const,
+            isClaimRelated: false,
+            keyFindings: []
+          }))
+        },
+        isReadyForProcessing: false,
+        rawContent: content.substring(0, 2000) // Store partial raw content for debugging
+      };
+
+      console.log(`[unified-analysis] Returning fallback result due to parse error`);
+      return fallbackResult;
     }
 
     if (parsed) {
