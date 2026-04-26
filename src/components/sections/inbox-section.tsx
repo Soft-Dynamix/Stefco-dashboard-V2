@@ -1015,36 +1015,36 @@ export function InboxSection() {
               
               {/* Tabs */}
               <Tabs defaultValue="content" className="flex-1 flex flex-col overflow-hidden min-h-0">
-                <TabsList className="mx-5 my-1.5 flex-shrink-0 h-8">
-                  <TabsTrigger value="content" className="gap-1.5 text-xs h-7">
-                    <Mail className="h-3.5 w-3.5" />
+                <TabsList className="mx-5 my-2 flex-shrink-0 h-10">
+                  <TabsTrigger value="content" className="gap-2 text-sm h-8 px-4">
+                    <Mail className="h-4 w-4" />
                     Content
                   </TabsTrigger>
-                  <TabsTrigger value="ai" className="gap-1.5 text-xs h-7">
-                    <Brain className="h-3.5 w-3.5" />
+                  <TabsTrigger value="ai" className="gap-2 text-sm h-8 px-4">
+                    <Brain className="h-4 w-4" />
                     AI Analysis
                   </TabsTrigger>
-                  <TabsTrigger value="actions" className="gap-1.5 text-xs h-7">
-                    <AlertCircle className="h-3.5 w-3.5" />
+                  <TabsTrigger value="actions" className="gap-2 text-sm h-8 px-4">
+                    <AlertCircle className="h-4 w-4" />
                     Actions
                   </TabsTrigger>
                 </TabsList>
                 
                 {/* Tab Content with Scroll */}
                 <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-0">
-                  <TabsContent value="content" className="mt-1 space-y-2">
+                  <TabsContent value="content" className="mt-2 space-y-3">
                     {/* Email Body Card */}
                     <Card className="border">
-                      <CardHeader className="py-2 px-3 bg-muted/30 border-b">
-                        <CardTitle className="text-xs font-medium flex items-center gap-1.5">
-                          <FileText className="h-3.5 w-3.5" />
+                      <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
                           Email Body
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(92vh-220px)] min-h-[400px]">
+                        <ScrollArea className="h-[calc(92vh-240px)] min-h-[400px]">
                           <div className="p-5">
-                            <pre className="text-sm whitespace-pre-wrap font-sans leading-7 tracking-wide">
+                            <pre className="text-base whitespace-pre-wrap font-sans leading-7 tracking-wide">
                               {selectedEmail.bodyText || (
                                 <span className="text-muted-foreground italic">No content available</span>
                               )}
@@ -1055,20 +1055,20 @@ export function InboxSection() {
                     </Card>
                     
                     {/* Processing Info - Compact inline */}
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-3 py-2 bg-muted/20 rounded-md text-xs">
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 bg-muted/20 rounded-md text-sm">
+                      <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Status:</span>
                         {getStatusBadge(selectedEmail.status)}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Route:</span>
                         <span className="font-medium">{selectedEmail.processingRoute || "-"}</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Learning Hints:</span>
                         <span className="font-medium">{selectedEmail.learningHintsCount}</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Processed:</span>
                         <span className="font-medium">
                           {selectedEmail.processedAt 
@@ -1079,33 +1079,33 @@ export function InboxSection() {
                     </div>
                   </TabsContent>
                   
-                  <TabsContent value="ai" className="mt-1 space-y-2">
+                  <TabsContent value="ai" className="mt-2 space-y-3">
                     {/* AI Analysis - Two Column Layout */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {/* Left Column - Classification & Reasoning */}
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {/* Classification Card */}
                         <Card className="border">
-                          <CardHeader className="py-2 px-3 bg-muted/30 border-b">
-                            <CardTitle className="text-xs font-medium flex items-center gap-1.5">
-                              <Brain className="h-3.5 w-3.5" />
+                          <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                              <Brain className="h-4 w-4" />
                               AI Classification
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="py-3">
+                          <CardContent className="py-4">
                             <div className="flex flex-wrap items-center gap-4">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Result:</span>
+                                <span className="text-sm text-muted-foreground">Result:</span>
                                 {selectedEmail.aiClassification 
                                   ? getClassificationBadge(selectedEmail.aiClassification)
                                   : <Badge variant="outline" className="text-xs">Not analyzed</Badge>}
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Confidence:</span>
+                                <span className="text-sm text-muted-foreground">Confidence:</span>
                                 {selectedEmail.aiConfidence !== null ? (
                                   <div className="flex items-center gap-2">
-                                    <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                                      <div 
+                                    <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                                      <div
                                         className={`h-full rounded-full ${
                                           selectedEmail.aiConfidence >= 80 ? 'bg-green-500' :
                                           selectedEmail.aiConfidence >= 60 ? 'bg-yellow-500' : 'bg-red-500'
@@ -1113,10 +1113,10 @@ export function InboxSection() {
                                         style={{ width: `${selectedEmail.aiConfidence}%` }}
                                       />
                                     </div>
-                                    <span className="text-xs font-medium">{selectedEmail.aiConfidence.toFixed(0)}%</span>
+                                    <span className="text-sm font-medium">{selectedEmail.aiConfidence.toFixed(0)}%</span>
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground">-</span>
+                                  <span className="text-sm text-muted-foreground">-</span>
                                 )}
                               </div>
                             </div>
@@ -1125,13 +1125,13 @@ export function InboxSection() {
                         
                         {/* AI Reasoning Card */}
                         <Card className="border">
-                          <CardHeader className="py-2 px-3 bg-muted/30 border-b">
-                            <CardTitle className="text-xs font-medium">AI Reasoning</CardTitle>
+                          <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                            <CardTitle className="text-sm font-medium">AI Reasoning</CardTitle>
                           </CardHeader>
                           <CardContent className="p-0">
-                            <ScrollArea className="h-[calc(92vh-350px)] min-h-[150px]">
-                              <div className="p-3">
-                                <p className="text-xs leading-relaxed">
+                            <ScrollArea className="h-[calc(92vh-380px)] min-h-[150px]">
+                              <div className="p-4">
+                                <p className="text-sm leading-relaxed">
                                   {selectedEmail.aiReasoning || (
                                     <span className="text-muted-foreground italic">No reasoning available</span>
                                   )}
@@ -1144,17 +1144,17 @@ export function InboxSection() {
                       
                       {/* Right Column - Extracted Data */}
                       <Card className="border">
-                        <CardHeader className="py-2 px-3 bg-muted/30 border-b">
-                          <CardTitle className="text-xs font-medium flex items-center gap-1.5">
-                            <FileText className="h-3.5 w-3.5" />
+                        <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
                             Extracted Data
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0">
-                          <ScrollArea className="h-[calc(92vh-280px)] min-h-[300px]">
+                          <ScrollArea className="h-[calc(92vh-300px)] min-h-[300px]">
                           <div className="p-4">
                             {selectedEmail.aiExtractedData ? (
-                              <pre className="text-sm font-mono bg-muted/50 p-3 rounded-md">
+                              <pre className="text-sm font-mono bg-muted/50 p-4 rounded-md">
                                 {JSON.stringify(JSON.parse(selectedEmail.aiExtractedData), null, 2)}
                               </pre>
                             ) : (
@@ -1167,68 +1167,68 @@ export function InboxSection() {
                     </div>
                   </TabsContent>
                   
-                  <TabsContent value="actions" className="mt-1 space-y-2">
+                  <TabsContent value="actions" className="mt-2 space-y-4">
                     {/* Follow-up warning */}
                     {isLikelyFollowUp(selectedEmail) && (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-md">
-                        <MessageSquare className="h-4 w-4 text-blue-500" />
-                        <span className="text-xs text-blue-700">This looks like a follow-up email (Re:/FWD:)</span>
+                      <div className="flex items-center gap-2 px-4 py-3 bg-blue-500/10 border border-blue-500/30 rounded-md">
+                        <MessageSquare className="h-5 w-5 text-blue-500" />
+                        <span className="text-sm text-blue-700">This looks like a follow-up email (Re:/FWD:)</span>
                       </div>
                     )}
                     
-                    {/* Action Buttons - Compact */}
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-4">
                       <Button
-                        className="h-auto py-2 flex-col gap-0.5"
+                        className="h-auto py-4 flex-col gap-1"
                         onClick={() => createClaimFromEmail(selectedEmail)}
                         disabled={selectedEmail.status === "CLAIM_CREATED"}
                       >
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-xs">Create Claim</span>
+                        <CheckCircle className="h-5 w-5" />
+                        <span className="text-sm">Create Claim</span>
                       </Button>
                       <Button
                         variant="destructive"
-                        className="h-auto py-2 flex-col gap-0.5"
+                        className="h-auto py-4 flex-col gap-1"
                         onClick={() => openRejectModal(selectedEmail)}
                         disabled={selectedEmail.status === "IGNORED"}
                       >
-                        <XCircle className="h-4 w-4" />
-                        <span className="text-xs">Ignore</span>
+                        <XCircle className="h-5 w-5" />
+                        <span className="text-sm">Ignore</span>
                       </Button>
                     </div>
                     
                     {/* Secondary Actions */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-4">
                       <Button 
                         variant="outline" 
-                        size="sm"
+                        className="py-3"
                         onClick={() => reanalyzeEmail(selectedEmail)}
                         disabled={isReanalyzing}
                       >
                         {isReanalyzing ? (
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
-                          <Brain className="mr-1.5 h-3.5 w-3.5" />
+                          <Brain className="mr-2 h-4 w-4" />
                         )}
-                        <span className="text-xs">Re-analyze</span>
+                        <span className="text-sm">Re-analyze</span>
                       </Button>
                       {selectedEmail.status === "ARCHIVED" ? (
                         <Button 
                           variant="outline" 
-                          size="sm"
+                          className="py-3"
                           onClick={() => archiveEmail(selectedEmail.id, false)}
                         >
-                          <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
-                          <span className="text-xs">Unarchive</span>
+                          <ArchiveRestore className="mr-2 h-4 w-4" />
+                          <span className="text-sm">Unarchive</span>
                         </Button>
                       ) : (
                         <Button 
                           variant="outline" 
-                          size="sm"
+                          className="py-3"
                           onClick={() => archiveEmail(selectedEmail.id, true)}
                         >
-                          <Archive className="mr-1.5 h-3.5 w-3.5" />
-                          <span className="text-xs">Archive</span>
+                          <Archive className="mr-2 h-4 w-4" />
+                          <span className="text-sm">Archive</span>
                         </Button>
                       )}
                     </div>
