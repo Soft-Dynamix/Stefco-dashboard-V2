@@ -2404,89 +2404,9 @@ Respond in JSON format:
     }
   } catch (error) {
     console.error("[unified-analysis] Failed:", error);
+    // Re-throw the error so the API can return a proper error response
+    throw new Error(`Unified analysis failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  // Fallback result
-  return {
-    classification: "OTHER",
-    confidence: 0,
-    reasoning: "Failed to perform unified analysis",
-    claimTypeIdentified: "OTHER",
-    claimTypeReasoning: "Analysis failed - could not determine claim type",
-    extractedData: {
-      // Universal fields
-      claimNumber: null,
-      policyNumber: null,
-      claimType: null,
-      incidentDate: null,
-      incidentTime: null,
-      incidentLocation: null,
-      incidentDescription: null,
-      clientName: null,
-      clientIdNumber: null,
-      clientPhone: null,
-      clientEmail: null,
-      clientAddress: null,
-      insuranceCompany: null,
-      policyInceptionDate: null,
-      policyExpiryDate: null,
-      policeCaseNumber: null,
-      // Motor fields
-      vehicleRegistration: null,
-      vehicleMake: null,
-      vehicleModel: null,
-      vehicleYear: null,
-      vehicleColor: null,
-      vehicleVinNumber: null,
-      driverName: null,
-      driverIdNumber: null,
-      thirdPartyName: null,
-      thirdPartyVehicleReg: null,
-      excessAmount: null,
-      estimatedDamage: null,
-      sumInsured: null,
-      premium: null,
-      benefits: [],
-      extensions: [],
-      specifiedItems: [],
-      // Property fields
-      propertyAddress: null,
-      propertyType: null,
-      damageDescription: null,
-      estimatedValue: null,
-      // Theft fields
-      stolenItems: [],
-      dateOfDiscovery: null,
-      securityMeasures: null,
-      // Liability fields
-      witnessNames: [],
-      injuriesReported: null,
-      // Fire fields
-      fireReportNumber: null,
-      causeOfFire: null,
-      extentOfDamage: null,
-      // GAP fields
-      originalVehicleValue: null,
-      settlementAmount: null,
-      financeOutstanding: null,
-      dateOfTotalLoss: null
-    },
-    dataSources: {},
-    keyIndicators: [],
-    missingInformation: ["Analysis failed"],
-    documentsAnalyzed: {
-      emailBody: !!(emailData.bodyText),
-      attachments: attachmentResults.map(r => ({
-        fileName: r.fileName,
-        documentType: r.classification.documentType,
-        isClaimRelated: r.classification.isClaimRelated,
-        keyFindings: []
-      }))
-    },
-    overallClaimLikelihood: 0,
-    isReadyForProcessing: false,
-    recommendedAction: "MANUAL_REVIEW"
-  };
 }
 
 /**

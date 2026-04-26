@@ -320,3 +320,28 @@ Stage Summary:
 - LLM knows to classify based on filename only
 - Lint check passes (1 pre-existing warning)
 - Dev server running correctly
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Fix "Analysis Failed" error with generic system error message
+
+Work Log:
+- **Issue**: "Analysis Failed" toast showing generic error message
+  - Error shown: "System Error: Unexpected error - An error occurred while processing the request."
+  - This generic message comes from z-ai SDK when API calls fail
+  - Was not giving users useful information about what went wrong
+- **Fix**: Improved error handling in `performUnifiedAnalysis`
+  - Changed from silent catch + fallback result to explicit error throw
+  - Error now propagates to API layer with detailed message
+  - Users will see the actual error (e.g., "Unified analysis failed: rate limited")
+- **Removed dead code**: Removed unreachable fallback result after catch block
+  - Previous code had return statement after throw (unreachable)
+  - Cleaned up ~80 lines of dead code
+
+Stage Summary:
+- Errors from AI API are now properly propagated to the UI
+- Users will see more informative error messages
+- API will return proper error status (500) instead of 200 with empty data
+- Lint check passes (1 pre-existing warning about image alt prop)
+- Dev server running correctly
