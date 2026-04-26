@@ -1079,3 +1079,75 @@ Base64 encoding is identified by:
 - Content containing only A-Za-z0-9+/= characters
 - The content is decoded using Buffer.from(str, 'base64').toString('utf-8') in backend
 - The frontend uses atob() for client-side decoding
+
+---
+Task ID: 48
+Agent: Main Agent
+Task: Implement AI-Powered Attachment Analysis for Claim Detection
+
+Work Log:
+- Created comprehensive attachment-ai-analyzer.ts module with:
+  - Document type classification (CLAIM_FORM, POLICY_SCHEDULE, INVOICE, etc.)
+  - Claim form data extraction using VLM (policy holder, vehicle, incident details)
+  - Policy schedule data extraction (policy numbers, coverage, insured items)
+  - Claim likelihood scoring based on attachment content
+  - Learning system for user feedback on extracted data
+- Added new database models to Prisma schema:
+  - AttachmentAnalysis: Stores AI analysis results per attachment
+  - AttachmentLearning: Stores user corrections for learning
+  - EmailAttachmentSummary: Email-level summary for claim detection
+- Created /api/attachment-analysis endpoint for:
+  - Triggering attachment analysis on demand
+  - Retrieving analysis results
+  - Submitting user feedback for learning
+- Integrated attachment analysis into email processing pipeline:
+  - Detects attachments in incoming emails
+  - Creates attachment summary placeholder
+  - Boosts classification confidence if attachment names suggest claim documents
+- Added Attachments tab to email detail dialog with:
+  - List of attachments with file type icons
+  - "Claim Document" badges for likely claim-related files
+  - "Analyze Attachments" button for on-demand AI analysis
+  - Claim detection hints showing likely claim documents
+
+Stage Summary:
+- AI-powered attachment analysis system fully implemented
+- Document classification distinguishes between claim forms, policy schedules, invoices, etc.
+- Extraction of key data from claim forms and policy schedules
+- Claim likelihood scoring helps identify genuine new claims
+- Learning system improves accuracy over time from user feedback
+- UI provides clear visibility of attachments and their analysis
+
+Files Created:
+- src/lib/attachment-ai-analyzer.ts - Main attachment analysis module
+- src/app/api/attachment-analysis/route.ts - API endpoint
+
+Files Modified:
+- prisma/schema.prisma - Added AttachmentAnalysis, AttachmentLearning, EmailAttachmentSummary models
+- src/lib/email-poller.ts - Integrated attachment analysis into email processing
+- src/components/sections/inbox-section.tsx - Added Attachments tab with analysis UI
+
+Database Models Added:
+- AttachmentAnalysis: Stores per-attachment AI analysis results
+- AttachmentLearning: Records user corrections for learning
+- EmailAttachmentSummary: Email-level summary for claim detection
+
+Document Types Classified:
+- CLAIM_FORM: Claim submission forms, incident reports
+- POLICY_SCHEDULE: Insurance policy documents, certificates
+- INVOICE: Bills, statements, payment requests
+- QUOTATION: Quotes, estimates, proposals
+- POLICE_REPORT: Police case reports, accident case numbers
+- MEDICAL_REPORT: Medical reports, hospital documentation
+- VEHICLE_ASSESSMENT: Vehicle damage assessments, inspection reports
+- REPAIR_QUOTE: Repair estimates, body shop quotes
+- PHOTO_EVIDENCE: Photos of damage, accidents, vehicles
+- And 6 more document types
+
+Key Features:
+- VLM-based document analysis using GPT-4o Vision
+- South African specific patterns (vehicle registrations, phone numbers, ID numbers)
+- Claim likelihood scoring (0-100) based on document types and content
+- Learning from user corrections to improve future extractions
+- Integration with existing email classification pipeline
+

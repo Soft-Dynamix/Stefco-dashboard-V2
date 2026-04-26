@@ -60,6 +60,10 @@ import {
   X,
   Image,
   Code,
+  Paperclip,
+  FileSearch,
+  AlertTriangle,
+  FileCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
@@ -72,6 +76,7 @@ interface Email {
   fromDomain: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
+  attachments: string | null;
   aiClassification: string | null;
   aiConfidence: number | null;
   aiReasoning: string | null;
@@ -1093,6 +1098,20 @@ export function InboxSection() {
                     <Mail className="h-4 w-4" />
                     Content
                   </TabsTrigger>
+                  <TabsTrigger value="attachments" className="gap-2 text-sm h-8 px-4">
+                    <Paperclip className="h-4 w-4" />
+                    Attachments
+                    {selectedEmail.attachments && (() => {
+                      try {
+                        const atts = JSON.parse(selectedEmail.attachments);
+                        return atts.length > 0 ? (
+                          <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                            {atts.length}
+                          </Badge>
+                        ) : null;
+                      } catch { return null; }
+                    })()}
+                  </TabsTrigger>
                   <TabsTrigger value="ai" className="gap-2 text-sm h-8 px-4">
                     <Brain className="h-4 w-4" />
                     AI Analysis
@@ -1183,6 +1202,169 @@ export function InboxSection() {
                         </span>
                       </div>
                     </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="attachments" className="mt-2 space-y-3">
+                    {/* Attachments Analysis Card */}
+                    <Card className="border">
+                      <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Paperclip className="h-4 w-4" />
+                          Attachments
+                        </CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          AI-powered document analysis for claim detection
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="py-4">
+                        {selectedEmail.attachments ? (
+                          (() => {
+                            try {
+                              const attachments = JSON.parse(selectedEmail.attachments);
+                              if (attachments.length === 0) {
+                                return (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    <Paperclip className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">No attachments in this email</p>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between mb-4">
+                                    <div className="text-sm text-muted-foreground">
+                                      {attachments.length} attachment{attachments.length > 1 ? 's' : ''} found
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-2"
+                                      onClick={async () => {
+                                        try {
+                                          const response = await fetch('/api/attachment-analysis', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              action: 'analyze',
+                                              emailId: selectedEmail.id,
+                                              attachments: attachments.map((a: { filename: string; contentType?: string; size?: number }) => ({
+                                                filename: a.filename,
+                                                mimeType: a.contentType,
+                                                size: a.size,
+                                              })),
+                                              companyContext: selectedEmail.fromDomain,
+                                            }),
+                                          });
+                                          const result = await response.json();
+                                          if (result.success) {
+                                            toast({
+                                              title: "Analysis Complete",
+                                              description: `Found ${result.summary?.keyIndicators?.length || 0} key indicators. Claim likelihood: ${result.summary?.overallClaimLikelihood || 0}%`,
+                                            });
+                                          } else {
+                                            throw new Error(result.error);
+                                          }
+                                        } catch (error) {
+                                          toast({
+                                            title: "Analysis Failed",
+                                            description: String(error),
+                                            variant: "destructive",
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <FileSearch className="h-4 w-4" />
+                                      Analyze Attachments
+                                    </Button>
+                                  </div>
+                                  
+                                  {/* Attachments List */}
+                                  <div className="grid gap-2">
+                                    {attachments.map((att: { filename: string; contentType?: string; size?: number }, idx: number) => {
+                                      const isImage = att.contentType?.startsWith('image/');
+                                      const isPdf = att.contentType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf');
+                                      const isDoc = att.filename.toLowerCase().endsWith('.doc') || att.filename.toLowerCase().endsWith('.docx');
+                                      
+                                      // Check if filename suggests claim-related content
+                                      const filenameLower = att.filename.toLowerCase();
+                                      const isClaimRelated = 
+                                        filenameLower.includes('claim') ||
+                                        filenameLower.includes('policy') ||
+                                        filenameLower.includes('schedule') ||
+                                        filenameLower.includes('form') ||
+                                        filenameLower.includes('incident') ||
+                                        filenameLower.includes('accident');
+                                      
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className={`flex items-center gap-3 p-3 rounded-md border ${
+                                            isClaimRelated ? 'border-green-500/30 bg-green-500/5' : 'border-border'
+                                          }`}
+                                        >
+                                          <div className={`p-2 rounded-md ${
+                                            isPdf ? 'bg-red-100 text-red-600' :
+                                            isImage ? 'bg-blue-100 text-blue-600' :
+                                            isDoc ? 'bg-purple-100 text-purple-600' :
+                                            'bg-gray-100 text-gray-600'
+                                          }`}>
+                                            <FileText className="h-5 w-5" />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-medium truncate">{att.filename}</p>
+                                              {isClaimRelated && (
+                                                <Badge variant="outline" className="text-xs text-green-600 border-green-500/30">
+                                                  Claim Document
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                              {att.contentType || 'Unknown type'}
+                                              {att.size && ` • ${(att.size / 1024).toFixed(1)} KB`}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Claim Detection Hint */}
+                                  {attachments.some((a: { filename: string }) => 
+                                    a.filename.toLowerCase().includes('claim') ||
+                                    a.filename.toLowerCase().includes('policy') ||
+                                    a.filename.toLowerCase().includes('form')
+                                  ) && (
+                                    <div className="flex items-start gap-2 p-3 mt-4 bg-green-500/10 border border-green-500/30 rounded-md">
+                                      <FileCheck className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="text-sm font-medium text-green-700">Likely Claim Documents Detected</p>
+                                        <p className="text-xs text-green-600 mt-1">
+                                          This email contains attachments that appear to be claim-related (claim forms, policy schedules, etc.).
+                                          These documents typically indicate a new claim submission.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } catch {
+                              return (
+                                <div className="text-center py-8 text-muted-foreground">
+                                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                  <p className="text-sm">Could not parse attachment data</p>
+                                </div>
+                              );
+                            }
+                          })()
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Paperclip className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No attachments in this email</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </TabsContent>
                   
                   <TabsContent value="ai" className="mt-2 space-y-3">

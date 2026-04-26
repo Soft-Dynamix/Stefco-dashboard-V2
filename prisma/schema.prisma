@@ -1064,6 +1064,108 @@ model ClaimNumberCandidate {
 }
 
 // =============================================================================
+// ENHANCED ATTACHMENT AI ANALYSIS (v4.0)
+// =============================================================================
+
+/// AI-powered attachment analysis with document classification
+model AttachmentAnalysis {
+  id                    String   @id @default(cuid())
+  emailQueueId          String
+  
+  // Attachment info
+  fileName              String
+  fileType              String   // PDF, IMAGE, DOC, OTHER
+  fileSize              Int?
+  
+  // Document classification
+  documentType          String   // CLAIM_FORM, POLICY_SCHEDULE, INVOICE, etc.
+  documentConfidence    Float    @default(0)
+  isClaimRelated        Boolean  @default(false)
+  importance            String   @default("LOW")  // HIGH, MEDIUM, LOW
+  
+  // Claim likelihood scoring
+  claimLikelihoodScore  Float    @default(0)  // 0-100
+  containsClaimNumber   Boolean  @default(false)
+  containsPolicyNumber  Boolean  @default(false)
+  containsVehicleReg    Boolean  @default(false)
+  
+  // Extracted data (JSON)
+  rawExtractedText      String?  // Full text extracted from attachment
+  claimFormData         String?  // JSON of ClaimFormData interface
+  policyScheduleData    String?  // JSON of PolicyScheduleData interface
+  
+  // Processing metadata
+  processingTimeMs      Int?
+  processingError       String?
+  
+  createdAt             DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@index([documentType])
+  @@index([isClaimRelated])
+  @@map("attachment_analysis")
+}
+
+/// Learning from user corrections on attachment data
+model AttachmentLearning {
+  id                    String   @id @default(cuid())
+  emailQueueId          String
+  attachmentAnalysisId  String?
+  
+  // What was corrected
+  fieldName             String   // claimNumber, policyNumber, etc.
+  originalValue         String?
+  correctedValue        String
+  
+  // Context
+  companyContext        String?  // Insurance company if known
+  
+  // Metadata
+  learnedAt             DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@index([fieldName])
+  @@index([companyContext])
+  @@map("attachment_learning")
+}
+
+/// Email-level attachment summary for claim detection
+model EmailAttachmentSummary {
+  id                      String   @id @default(cuid())
+  emailQueueId            String   @unique
+  
+  // Attachment counts
+  totalAttachments        Int      @default(0)
+  claimRelatedAttachments Int      @default(0)
+  
+  // Document type flags
+  hasClaimForm            Boolean  @default(false)
+  hasPolicySchedule       Boolean  @default(false)
+  hasSupportingDocuments  Boolean  @default(false)
+  
+  // Combined extracted data
+  combinedClaimData       String?  // JSON of combined claim data
+  combinedPolicyData      String?  // JSON of combined policy data
+  
+  // Overall assessment
+  overallClaimLikelihood  Float    @default(0)  // 0-100
+  isLikelyNewClaim        Boolean  @default(false)
+  confidenceLevel         String   @default("LOW")  // HIGH, MEDIUM, LOW
+  
+  // Reasoning
+  assessmentReason        String?
+  keyIndicators           String?  // JSON array of key indicators found
+  missingInformation      String?  // JSON array of missing fields
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([emailQueueId])
+  @@index([isLikelyNewClaim])
+  @@map("email_attachment_summary")
+}
+
+// =============================================================================
 // ANALYTICS MODELS (Derived/Aggregated)
 // =============================================================================
 

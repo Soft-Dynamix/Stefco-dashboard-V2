@@ -762,6 +762,77 @@ Respond with this exact JSON structure (no markdown, no explanation):
           }
         }
 
+        // Attachment Analysis: Check if email has attachments and analyze them
+        let attachmentSummary = null;
+        if (email.attachments) {
+          try {
+            const attachmentsData = JSON.parse(email.attachments);
+            if (Array.isArray(attachmentsData) && attachmentsData.length > 0) {
+              // Import attachment analyzer dynamically to avoid circular dependencies
+              const { analyzeAllAttachments } = await import("./attachment-ai-analyzer");
+              
+              // Prepare attachments for analysis (attachments from IMAP don't have content yet)
+              // We'll create a placeholder for now - actual content analysis happens on demand
+              const attachmentsForAnalysis = attachmentsData.map((att: { filename: string; contentType?: string; size?: number }) => ({
+                filename: att.filename,
+                mimeType: att.contentType,
+                size: att.size,
+                content: undefined, // Content will be fetched on-demand
+              }));
+              
+              // Store attachment metadata for later analysis
+              await db.emailAttachmentSummary.upsert({
+                where: { emailQueueId: email.id },
+                create: {
+                  emailQueueId: email.id,
+                  totalAttachments: attachmentsData.length,
+                  claimRelatedAttachments: 0,
+                  hasClaimForm: false,
+                  hasPolicySchedule: false,
+                  hasSupportingDocuments: false,
+                  overallClaimLikelihood: 0,
+                  isLikelyNewClaim: false,
+                  confidenceLevel: "LOW",
+                  assessmentReason: "Attachments detected - click 'Analyze Attachments' to process",
+                  keyIndicators: JSON.stringify(attachmentsData.map((a: { filename: string }) => a.filename)),
+                  missingInformation: JSON.stringify(["Attachment content not yet analyzed"]),
+                },
+                update: {
+                  totalAttachments: attachmentsData.length,
+                  assessmentReason: "Attachments detected - click 'Analyze Attachments' to process",
+                  keyIndicators: JSON.stringify(attachmentsData.map((a: { filename: string }) => a.filename)),
+                },
+              });
+              
+              // Check if attachment names suggest a claim
+              const attachmentNames = attachmentsData.map((a: { filename: string }) => a.filename.toLowerCase());
+              const hasClaimIndicators = attachmentNames.some((name: string) => 
+                name.includes('claim') || 
+                name.includes('policy') || 
+                name.includes('schedule') ||
+                name.includes('form') ||
+                name.includes('incident') ||
+                name.includes('accident')
+              );
+              
+              // If attachment names suggest claim and AI wasn't sure, boost confidence
+              if (hasClaimIndicators && classification.classification === "OTHER") {
+                classification.confidence = Math.min(100, classification.confidence + 15);
+                classification.reasoning += " (Attachments with claim-related filenames detected)";
+              }
+              
+              // If attachment names suggest claim and classification is NEW_CLAIM, boost confidence
+              if (hasClaimIndicators && classification.classification === "NEW_CLAIM") {
+                classification.confidence = Math.min(100, classification.confidence + 10);
+                classification.reasoning += " (Supporting attachments detected)";
+              }
+            }
+          } catch (attError) {
+            console.error("Attachment analysis error:", attError);
+            // Don't fail the whole email processing if attachment analysis fails
+          }
+        }
+
         // Update email queue
         // If AI classifies as IGNORE, automatically set status to IGNORED
         const newStatus = classification.classification === "IGNORE" ? "IGNORED" : "AI_ANALYZED";
