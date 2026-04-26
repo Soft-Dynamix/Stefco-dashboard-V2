@@ -101,6 +101,36 @@ Stage Summary:
 ---
 Task ID: 4
 Agent: Main Agent
+Task: Fix ROOT CAUSE - Attachment content not being extracted/stored
+
+Work Log:
+- **CRITICAL BUG IDENTIFIED**: `extractAttachmentMetadataFromSource` was DISCARDING attachment content
+  - The function extracted and decoded the content but only returned metadata (filename, contentType, size)
+  - The actual content was NOT stored, so AI had nothing to analyze!
+- **FIX**: Modified `extractAttachmentMetadataFromSource` in `attachment-extractor.ts`:
+  - Added `contentBase64` field to return type
+  - Now stores attachment content as base64 (up to 10MB per attachment)
+  - Content is ESSENTIAL for AI to analyze documents
+- Updated `EmailMessage` interface in `email-poller.ts`:
+  - Added `contentBase64` field to attachments array
+- Verified data flow:
+  - `extractAttachmentMetadataFromSource` now returns contentBase64
+  - `email-poller.ts` stores it in database via JSON.stringify
+  - `autoAnalyzeEmails` correctly parses and passes contentBase64 to `performUnifiedAnalysis`
+  - `analyzeAttachment` constructs data URL from contentBase64 for AI processing
+  - `analyzePdfWithLlm` extracts full text from PDF without truncation
+
+Stage Summary:
+- **ROOT CAUSE FIXED**: Attachment content is now properly extracted and stored
+- Previously: Only metadata (filename, type, size) was saved - AI had no content to analyze
+- Now: Full base64-encoded content is saved with each attachment
+- This was the reason vehicle details weren't being extracted - the AI literally had no document content!
+- Lint check passes (1 warning)
+- Dev server running correctly
+
+---
+Task ID: 5
+Agent: Main Agent
 Task: Make VIN extraction more flexible to handle various formats
 
 Work Log:

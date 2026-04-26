@@ -24,6 +24,7 @@ interface EmailMessage {
     filename: string;
     contentType: string;
     size: number;
+    contentBase64?: string;  // Base64 encoded content for AI analysis
   }>;
   date: Date | null;
 }

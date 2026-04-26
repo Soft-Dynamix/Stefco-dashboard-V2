@@ -233,15 +233,17 @@ export function extractAttachmentsFromSource(source: string): ExtractedAttachmen
 const headers: Record<string, string> = {};
 
 /**
- * Extract attachment metadata only (no content) from email source
- * This is lighter and used for initial email polling
+ * Extract attachment metadata AND content from email source
+ * This is used for initial email polling to get full attachment content for AI analysis
+ * CRITICAL: The contentBase64 is needed for AI to analyze document contents!
  */
 export function extractAttachmentMetadataFromSource(source: string): Array<{
   filename: string;
   contentType: string;
   size: number;
+  contentBase64?: string;  // Base64 encoded content - REQUIRED for AI analysis
 }> {
-  const metadata: Array<{ filename: string; contentType: string; size: number }> = [];
+  const metadata: Array<{ filename: string; contentType: string; size: number; contentBase64?: string }> = [];
   
   try {
     const contentTypeMatch = source.match(/Content-Type:\s*multipart\/[^;]+;\s*boundary=["']?([^"'\r\n]+)["']?/i);
@@ -262,10 +264,17 @@ export function extractAttachmentMetadataFromSource(source: string): Array<{
         
         if (content.length < 10) continue;
         
+        // Store content as base64 - this is ESSENTIAL for AI to analyze documents
+        // Limit to 10MB to avoid database issues, but most PDFs are under this
+        const contentBase64 = content.length < 10 * 1024 * 1024 
+          ? content.toString('base64') 
+          : undefined;
+        
         metadata.push({
           filename,
           contentType,
           size: content.length,
+          contentBase64,  // Include the actual content for AI analysis!
         });
       }
     }
