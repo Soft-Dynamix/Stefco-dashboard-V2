@@ -44,6 +44,14 @@ import {
   MessageSquare,
   XCircle,
   Lightbulb,
+  History,
+  CheckCircle,
+  XCircle as XIcon,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Target,
+  BarChart3,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -138,6 +146,81 @@ interface AutoIgnoreRule {
   createdAt: string;
 }
 
+interface FieldComparison {
+  field: string;
+  predicted: string | number | null;
+  actual: string | number | null;
+  confidence: number;
+  isCorrect: boolean;
+  errorType?: "missing" | "wrong" | "extra";
+}
+
+interface PredictionComparisonItem {
+  id: string;
+  emailQueueId: string;
+  claimId: string | null;
+  senderDomain: string | null;
+  claimType: string | null;
+  comparisons: string; // JSON string of FieldComparison[]
+  totalFields: number;
+  correctFields: number;
+  accuracyRate: number;
+  learningApplied: boolean;
+  createdAt: string;
+}
+
+interface FieldMetric {
+  id: string;
+  senderDomain: string;
+  fieldName: string;
+  claimType: string | null;
+  totalPredictions: number;
+  correctPredictions: number;
+  correctedCount: number;
+  accuracyRate: number;
+  recentAccuracy: number;
+  trendDirection: string;
+  avgConfidence: number;
+  readyForAutoClaim: boolean;
+  lastPredictionAt: string | null;
+  lastCorrectionAt: string | null;
+}
+
+interface AccuracyTrendItem {
+  date: string;
+  accuracy: number;
+  total: number;
+}
+
+interface LearningHistoryData {
+  comparisons: PredictionComparisonItem[];
+  totalComparisons: number;
+  currentPage: number;
+  totalPages: number;
+  fieldMetrics: FieldMetric[];
+  overallAccuracy: number;
+  accuracyTrend: AccuracyTrendItem[];
+  fieldsReadyForAuto: number;
+  totalFields: number;
+  domainsSummary: Array<{
+    senderDomain: string;
+    automationLevel: string;
+    totalEmails: number;
+    accuracyRate: number;
+  }>;
+  summary: {
+    totalPredictions: number;
+    totalCorrect: number;
+    overallAccuracy: number;
+    comparisonsCount: number;
+    fieldsLearned: number;
+    fieldsReadyForAuto: number;
+    improvingFields: number;
+    decliningFields: number;
+    stableFields: number;
+  };
+}
+
 export function LearningSection() {
   const [stats, setStats] = useState<LearningStats | null>(null);
   const [patterns, setPatterns] = useState<LearningPattern[]>([]);
@@ -145,9 +228,11 @@ export function LearningSection() {
   const [rejectionFeedback, setRejectionFeedback] = useState<RejectionFeedbackItem[]>([]);
   const [threadPatterns, setThreadPatterns] = useState<ThreadPatternItem[]>([]);
   const [autoIgnoreRules, setAutoIgnoreRules] = useState<AutoIgnoreRule[]>([]);
+  const [learningHistory, setLearningHistory] = useState<LearningHistoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
+  const [historyPage, setHistoryPage] = useState(1);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -160,7 +245,8 @@ export function LearningSection() {
     if (activeTab === "feedback") fetchRejectionFeedback();
     if (activeTab === "threads") fetchThreadPatterns();
     if (activeTab === "autoignore") fetchAutoIgnoreRules();
-  }, [activeTab]);
+    if (activeTab === "history") fetchLearningHistory();
+  }, [activeTab, historyPage]);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -222,6 +308,16 @@ export function LearningSection() {
       setAutoIgnoreRules(json);
     } catch (error) {
       console.error("Failed to fetch auto-ignore rules:", error);
+    }
+  };
+
+  const fetchLearningHistory = async () => {
+    try {
+      const res = await fetch(`/api/learning?type=history&page=${historyPage}&limit=20`);
+      const json = await res.json();
+      setLearningHistory(json);
+    } catch (error) {
+      console.error("Failed to fetch learning history:", error);
     }
   };
 
@@ -454,6 +550,10 @@ export function LearningSection() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="overview">Top Senders</TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1">
+            <History className="h-4 w-4" />
+            Learning History
+          </TabsTrigger>
           <TabsTrigger value="feedback">Rejection Feedback</TabsTrigger>
           <TabsTrigger value="autoignore">Auto-Ignore Rules</TabsTrigger>
           <TabsTrigger value="threads">Thread Detection</TabsTrigger>
@@ -541,6 +641,330 @@ export function LearningSection() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <div className="space-y-4">
+            {/* Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-5">
+              <Card className="border-blue-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Target className="h-4 w-4 text-blue-500" />
+                    Overall Accuracy
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {(learningHistory?.summary?.overallAccuracy || 0).toFixed(1)}%
+                  </div>
+                  <Progress 
+                    value={learningHistory?.summary?.overallAccuracy || 0} 
+                    className="mt-2" 
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="border-green-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    Correct Predictions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {learningHistory?.summary?.totalCorrect || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    of {learningHistory?.summary?.totalPredictions || 0} total
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-purple-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-purple-500" />
+                    Fields Learned
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-purple-600">
+                    {learningHistory?.summary?.fieldsLearned || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {learningHistory?.summary?.fieldsReadyForAuto || 0} ready for auto
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-emerald-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <ArrowUpRight className="h-4 w-4 text-emerald-500" />
+                    Improving
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-emerald-600">
+                    {learningHistory?.summary?.improvingFields || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">fields trending up</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-red-500/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <ArrowDownRight className="h-4 w-4 text-red-500" />
+                    Declining
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">
+                    {learningHistory?.summary?.decliningFields || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">fields need attention</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Prediction Comparisons Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5 text-blue-500" />
+                  AI Prediction vs Human Correction
+                </CardTitle>
+                <CardDescription>
+                  What the AI guessed vs what the human actually entered - this is how the system learns
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {learningHistory?.comparisons.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No learning history yet.</p>
+                    <p className="text-sm">When you create claims, the AI will compare its predictions with your input and learn from differences.</p>
+                  </div>
+                ) : (
+                  <>
+                    <ScrollArea className="h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Domain</TableHead>
+                            <TableHead>Claim Type</TableHead>
+                            <TableHead>Accuracy</TableHead>
+                            <TableHead>Fields</TableHead>
+                            <TableHead>Learning Applied</TableHead>
+                            <TableHead>Details</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {learningHistory?.comparisons.map((comp) => (
+                            <TableRow key={comp.id}>
+                              <TableCell className="text-sm">
+                                {new Date(comp.createdAt).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {comp.senderDomain || "Unknown"}
+                              </TableCell>
+                              <TableCell>
+                                {comp.claimType ? (
+                                  <Badge variant="outline">{comp.claimType}</Badge>
+                                ) : "-"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Progress 
+                                    value={comp.accuracyRate} 
+                                    className={`w-16 ${comp.accuracyRate >= 80 ? 'bg-green-100' : comp.accuracyRate >= 50 ? 'bg-yellow-100' : 'bg-red-100'}`}
+                                  />
+                                  <span className={comp.accuracyRate >= 80 ? 'text-green-600' : comp.accuracyRate >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+                                    {comp.accuracyRate.toFixed(0)}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-green-600">{comp.correctFields}</span>
+                                <span className="text-muted-foreground">/{comp.totalFields}</span>
+                              </TableCell>
+                              <TableCell>
+                                {comp.learningApplied ? (
+                                  <Badge className="bg-green-500">Learned</Badge>
+                                ) : (
+                                  <Badge variant="secondary">Pending</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <details className="cursor-pointer">
+                                  <summary className="text-sm text-blue-500 hover:text-blue-700">
+                                    View fields
+                                  </summary>
+                                  <div className="mt-2 p-2 bg-muted rounded text-xs space-y-1">
+                                    {(() => {
+                                      try {
+                                        const fields: FieldComparison[] = JSON.parse(comp.comparisons);
+                                        return fields.map((f, i) => (
+                                          <div key={i} className={`flex items-center gap-2 ${f.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                            {f.isCorrect ? (
+                                              <CheckCircle className="h-3 w-3" />
+                                            ) : (
+                                              <XIcon className="h-3 w-3" />
+                                            )}
+                                            <span className="font-medium">{f.field}:</span>
+                                            {!f.isCorrect && f.predicted && (
+                                              <span className="line-through text-muted-foreground">
+                                                "{String(f.predicted).substring(0, 30)}"
+                                              </span>
+                                            )}
+                                            {!f.isCorrect && f.actual && (
+                                              <span>→ "{String(f.actual).substring(0, 30)}"</span>
+                                            )}
+                                            {f.isCorrect && f.actual && (
+                                              <span>"{String(f.actual).substring(0, 30)}"</span>
+                                            )}
+                                          </div>
+                                        ));
+                                      } catch {
+                                        return <span className="text-muted-foreground">Error parsing fields</span>;
+                                      }
+                                    })()}
+                                  </div>
+                                </details>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+
+                    {/* Pagination */}
+                    {(learningHistory?.totalPages || 0) > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Page {learningHistory?.currentPage} of {learningHistory?.totalPages}
+                          <span className="ml-2">
+                            ({learningHistory?.totalComparisons} total records)
+                          </span>
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={historyPage <= 1}
+                            onClick={() => setHistoryPage(p => p - 1)}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={historyPage >= (learningHistory?.totalPages || 1)}
+                            onClick={() => setHistoryPage(p => p + 1)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Field Accuracy Metrics */}
+            {learningHistory && learningHistory.fieldMetrics.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-purple-500" />
+                    Field Accuracy by Domain
+                  </CardTitle>
+                  <CardDescription>
+                    Per-field accuracy tracking - fields need 90%+ accuracy for auto-claim
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Domain</TableHead>
+                          <TableHead>Field</TableHead>
+                          <TableHead>Accuracy</TableHead>
+                          <TableHead>Predictions</TableHead>
+                          <TableHead>Trend</TableHead>
+                          <TableHead>Auto-Claim</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {learningHistory.fieldMetrics.map((metric) => (
+                          <TableRow key={metric.id}>
+                            <TableCell className="font-medium">{metric.senderDomain}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{metric.fieldName}</Badge>
+                              {metric.claimType && (
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({metric.claimType})
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Progress 
+                                  value={metric.accuracyRate} 
+                                  className="w-20"
+                                />
+                                <span className={metric.accuracyRate >= 90 ? 'text-green-600 font-medium' : ''}>
+                                  {metric.accuracyRate.toFixed(0)}%
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{metric.totalPredictions}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {metric.trendDirection === "improving" && (
+                                  <>
+                                    <ArrowUpRight className="h-4 w-4 text-green-500" />
+                                    <span className="text-green-600 text-sm">Improving</span>
+                                  </>
+                                )}
+                                {metric.trendDirection === "declining" && (
+                                  <>
+                                    <ArrowDownRight className="h-4 w-4 text-red-500" />
+                                    <span className="text-red-600 text-sm">Declining</span>
+                                  </>
+                                )}
+                                {metric.trendDirection === "stable" && (
+                                  <>
+                                    <Minus className="h-4 w-4 text-gray-500" />
+                                    <span className="text-gray-600 text-sm">Stable</span>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {metric.readyForAutoClaim ? (
+                                <Badge className="bg-green-500">Ready</Badge>
+                              ) : (
+                                <Badge variant="secondary">
+                                  {metric.totalPredictions < 10 ? `${10 - metric.totalPredictions} more needed` : `${(90 - metric.accuracyRate).toFixed(0)}% to go`}
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="feedback" className="mt-4">

@@ -118,6 +118,103 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(rules);
     }
 
+    if (type === "history") {
+      // Get prediction comparisons with pagination
+      const page = parseInt(searchParams.get("page") || "1");
+      const limit = parseInt(searchParams.get("limit") || "50");
+      const skip = (page - 1) * limit;
+
+      const [comparisons, totalComparisons] = await Promise.all([
+        db.predictionComparison.findMany({
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limit,
+        }),
+        db.predictionComparison.count(),
+      ]);
+
+      // Get field accuracy metrics grouped by domain
+      const fieldMetrics = await db.fieldAccuracyMetric.findMany({
+        orderBy: [
+          { senderDomain: "asc" },
+          { accuracyRate: "desc" },
+        ],
+      });
+
+      // Calculate overall statistics
+      const totalPredictions = fieldMetrics.reduce((sum, m) => sum + m.totalPredictions, 0);
+      const totalCorrect = fieldMetrics.reduce((sum, m) => sum + m.correctPredictions, 0);
+      const overallAccuracy = totalPredictions > 0 ? (totalCorrect / totalPredictions) * 100 : 0;
+
+      // Get accuracy trend (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentComparisons = await db.predictionComparison.findMany({
+        where: {
+          createdAt: { gte: sevenDaysAgo }
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Group by day for trend chart
+      const dailyAccuracy: Record<string, { total: number; correct: number }> = {};
+      for (const comp of recentComparisons) {
+        const dateKey = comp.createdAt.toISOString().split('T')[0];
+        if (!dailyAccuracy[dateKey]) {
+          dailyAccuracy[dateKey] = { total: 0, correct: 0 };
+        }
+        dailyAccuracy[dateKey].total += comp.totalFields;
+        dailyAccuracy[dateKey].correct += comp.correctFields;
+      }
+
+      const accuracyTrend = Object.entries(dailyAccuracy).map(([date, data]) => ({
+        date,
+        accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+        total: data.total,
+      }));
+
+      // Fields ready for auto-claim
+      const fieldsReadyForAuto = fieldMetrics.filter(m => m.readyForAutoClaim);
+
+      // Domains summary
+      const domainsSummary = await db.senderPattern.findMany({
+        where: {
+          senderDomain: { in: [...new Set(fieldMetrics.map(m => m.senderDomain))] }
+        },
+        select: {
+          senderDomain: true,
+          automationLevel: true,
+          totalEmails: true,
+          accuracyRate: true,
+        }
+      });
+
+      return NextResponse.json({
+        comparisons,
+        totalComparisons,
+        currentPage: page,
+        totalPages: Math.ceil(totalComparisons / limit),
+        fieldMetrics,
+        overallAccuracy,
+        accuracyTrend,
+        fieldsReadyForAuto: fieldsReadyForAuto.length,
+        totalFields: fieldMetrics.length,
+        domainsSummary,
+        summary: {
+          totalPredictions,
+          totalCorrect,
+          overallAccuracy,
+          comparisonsCount: totalComparisons,
+          fieldsLearned: fieldMetrics.length,
+          fieldsReadyForAuto: fieldsReadyForAuto.length,
+          improvingFields: fieldMetrics.filter(m => m.trendDirection === "improving").length,
+          decliningFields: fieldMetrics.filter(m => m.trendDirection === "declining").length,
+          stableFields: fieldMetrics.filter(m => m.trendDirection === "stable").length,
+        }
+      });
+    }
+
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   } catch (error) {
     console.error("Learning GET error:", error);

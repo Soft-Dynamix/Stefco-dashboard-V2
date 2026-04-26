@@ -1692,3 +1692,43 @@ Auto-Adjustment Features:
 - Add missing prefix
 - Fix OCR errors (O -> 0)
 - Pad missing leading zeros
+
+---
+Task ID: 48
+Agent: Main Agent
+Task: Add Learning History for AI in Learning Engine
+
+Work Log:
+- Added Learning History tab to Learning Section UI
+- Created /api/learning?type=history endpoint for learning history data
+- Implemented prediction comparisons display (AI vs Human corrections)
+- Added field accuracy metrics table with trend indicators
+- Created summary cards showing overall accuracy, correct predictions, fields learned
+- Added improving/declining field trend indicators
+- Implemented pagination for learning history records
+- Added expandable field-level details showing predicted vs actual values
+- Regenerated Prisma client to include PredictionComparison and FieldAccuracyMetric models
+
+Stage Summary:
+- Learning History tab now shows what AI has learned over time
+- Displays prediction comparisons with accuracy rates per comparison
+- Shows per-field accuracy metrics by domain with trend indicators
+- Tracks progress toward auto-claim readiness (90%+ accuracy needed)
+- Provides clear visibility into AI learning progress
+
+Files Modified:
+- src/app/api/learning/route.ts - Added "history" type endpoint
+- src/components/sections/learning-section.tsx - Added Learning History tab with full UI
+
+Key Features:
+- Summary cards: Overall Accuracy, Correct Predictions, Fields Learned, Improving/Declining counts
+- Prediction Comparison table: Shows each AI prediction vs human correction with accuracy
+- Field Accuracy Metrics: Per-domain, per-field accuracy with trend direction
+- Auto-claim readiness indicator: Shows progress toward 90% accuracy threshold
+- Expandable details: Shows exact field-level predictions vs actuals
+
+UI Components Added:
+- 5 summary stat cards with color-coded borders
+- Prediction comparisons table with expandable field details
+- Field accuracy metrics table with trend arrows
+- Pagination for history records
