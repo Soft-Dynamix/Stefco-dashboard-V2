@@ -33,6 +33,7 @@ import {
   HelpCircle,
   RefreshCw,
   XCircle,
+  Brain,
 } from "lucide-react";
 
 interface Email {
@@ -141,17 +142,120 @@ export function FeedbackModal({
   const [relatedClaimId, setRelatedClaimId] = useState("");
   const [suggestedRule, setSuggestedRule] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiSuggestedCategory, setAiSuggestedCategory] = useState(false);
 
-  // Auto-suggest based on subject
+  // AI-powered auto-suggest based on classification and reasoning
   useEffect(() => {
-    if (email?.subject) {
-      const subject = email.subject.toLowerCase();
-      if (subject.startsWith("re:") || subject.startsWith("fwd:") || subject.includes("follow-up")) {
+    if (!email) return;
+
+    const subject = email.subject?.toLowerCase() || '';
+    const reasoning = email.aiReasoning?.toLowerCase() || '';
+    const classification = email.aiClassification;
+    const confidence = email.aiConfidence;
+
+    // Reset AI suggestion flag
+    setAiSuggestedCategory(false);
+
+    // Check for follow-up patterns in subject
+    const isFollowUpSubject = subject.startsWith('re:') || subject.startsWith('fwd:') || subject.includes('follow-up') || subject.includes('reply');
+    
+    if (isFollowUpSubject) {
+      setIsFollowUp(true);
+      setCategory('follow_up');
+      setReason('Detected as follow-up email based on subject prefix');
+      setAiSuggestedCategory(true);
+      return;
+    }
+
+    // Use AI reasoning to determine rejection category
+    if (reasoning) {
+      // Check for specific patterns in AI reasoning
+      if (reasoning.includes('follow-up') || reasoning.includes('reply to') || reasoning.includes('response to')) {
         setIsFollowUp(true);
-        if (!category) setCategory("follow_up");
+        setCategory('follow_up');
+        setReason('AI detected this as a follow-up/reply email');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('duplicate') || reasoning.includes('already exists') || reasoning.includes('repeated')) {
+        setCategory('duplicate');
+        setReason('AI detected potential duplicate content');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('marketing') || reasoning.includes('promotional') || reasoning.includes('advertisement') || reasoning.includes('newsletter')) {
+        setCategory('marketing');
+        setReason('AI detected marketing/promotional content');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('spam') || reasoning.includes('junk') || reasoning.includes('unsolicited')) {
+        setCategory('spam');
+        setReason('AI detected potential spam content');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('test') || reasoning.includes('sample') || reasoning.includes('demo')) {
+        setCategory('test_email');
+        setReason('AI detected test/sample content');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('personal') || reasoning.includes('non-official') || reasoning.includes('private')) {
+        setCategory('wrong_sender');
+        setReason('AI detected non-official sender type');
+        setAiSuggestedCategory(true);
+        return;
+      }
+      
+      if (reasoning.includes('not a claim') || reasoning.includes('no claim') || reasoning.includes('general correspondence') || reasoning.includes('inquiry')) {
+        setCategory('not_a_claim');
+        setReason('AI determined this is not a claim submission');
+        setAiSuggestedCategory(true);
+        return;
       }
     }
-  }, [email?.subject, category]);
+
+    // Use classification to suggest
+    if (classification === 'IGNORE') {
+      // AI already said ignore - try to determine why
+      if (confidence && confidence < 40) {
+        setCategory('not_a_claim');
+        setReason('Low AI confidence suggests non-claim content');
+      } else {
+        setCategory('other');
+        setReason('AI classification was IGNORE');
+      }
+      setAiSuggestedCategory(true);
+      return;
+    }
+
+    if (classification === 'MISSING_INFO') {
+      setCategory('not_a_claim');
+      setReason('AI detected missing or incomplete claim information');
+      setAiSuggestedCategory(true);
+      return;
+    }
+
+    if (classification === 'OTHER') {
+      setCategory('not_a_claim');
+      setReason('AI classified as OTHER - not a standard claim');
+      setAiSuggestedCategory(true);
+      return;
+    }
+
+    // Default fallback based on confidence
+    if (confidence !== null && confidence < 50) {
+      setCategory('not_a_claim');
+      setReason('Low AI confidence - may not be a valid claim');
+      setAiSuggestedCategory(true);
+    }
+  }, [email]);
 
   // Generate suggested rule based on category
   useEffect(() => {
@@ -241,8 +345,16 @@ export function FeedbackModal({
 
           {/* Category Selection */}
           <div className="space-y-3">
-            <Label>Rejection Category *</Label>
-            <Select value={category} onValueChange={setCategory}>
+            <div className="flex items-center justify-between">
+              <Label>Rejection Category *</Label>
+              {aiSuggestedCategory && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Brain className="h-3 w-3" />
+                  AI Suggested
+                </Badge>
+              )}
+            </div>
+            <Select value={category} onValueChange={(v) => { setCategory(v); setAiSuggestedCategory(false); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select why this email should be ignored..." />
               </SelectTrigger>
