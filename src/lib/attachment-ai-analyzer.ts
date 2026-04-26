@@ -1074,7 +1074,7 @@ function getMimeTypeFromFilename(fileName: string): string {
 
 /**
  * Analyze PDF using LLM (text-based approach)
- * This is more reliable than trying to send PDFs to vision APIs
+ * Note: VLM only supports images, not PDFs, so we use regular LLM for PDFs
  */
 async function analyzePdfWithLlm(
   dataUrl: string,
@@ -1092,11 +1092,14 @@ async function analyzePdfWithLlm(
   const base64Match = dataUrl.match(/base64,(.+)/);
   const base64Content = base64Match ? base64Match[1] : "";
   
-  // For PDF analysis, we use VLM with the PDF data URL
-  // The z-ai-web-dev-sdk supports PDF files in vision API
+  // VLM doesn't support PDFs directly, so we use a filename-based approach
+  // and potentially extract text content for analysis
+  console.log(`[analyzePdfWithLlm] Processing PDF: ${fileName} (${base64Content.length} chars base64)`);
+  
+  // Use LLM to analyze based on filename patterns and available metadata
   const classificationPrompt = `You are an expert insurance document classifier for South African insurance companies.
 
-Analyze this PDF document and classify it into one of these categories:
+Analyze this PDF document based on its filename and classify it into one of these categories:
 - CLAIM_FORM: Claim submission forms, incident reports, accident notifications
 - POLICY_SCHEDULE: Insurance policy documents, certificates of insurance, schedule of coverage
 - INVOICE: Bills, statements, payment requests
@@ -1116,12 +1119,14 @@ Analyze this PDF document and classify it into one of these categories:
 Document filename: ${fileName}
 ${companyContext ? `This document is from ${companyContext}.` : ''}
 
-Look for:
-1. Document structure and layout
-2. Key phrases and headers (e.g., "Claim Form", "Policy Schedule", "Claim Number")
-3. Presence of claim numbers, policy numbers, vehicle details
-4. Document purpose and content
-5. South African specific formats (ID numbers, vehicle registrations like XX XX GP)
+Look for patterns in the filename:
+- "Claim" or "claimform" → CLAIM_FORM
+- "Policy" + "Schedule" → POLICY_SCHEDULE
+- "Invoice" or "Statement" → INVOICE
+- "Quote" or "Quotation" → QUOTATION
+- "Police" or "CAS" → POLICE_REPORT
+- Policy numbers like "PSGTC0002483778" often indicate policy schedules
+- Claim numbers like "STM-2024-12345" indicate claim documents
 
 Respond in JSON format:
 {
@@ -1130,27 +1135,20 @@ Respond in JSON format:
   "reasoning": "brief explanation of classification",
   "isClaimRelated": true/false,
   "importance": "HIGH/MEDIUM/LOW",
-  "extractedText": "key text content from the document",
-  "claimNumber": "if found, or null",
-  "policyNumber": "if found, or null",
-  "vehicleRegistration": "if found, or null",
-  "claimType": "MOTOR/PROPERTY/LIABILITY/THEFT/FIRE/GAP/OTHER if determinable, or null"
+  "possiblePolicyNumber": "if pattern found in filename",
+  "possibleClaimNumber": "if pattern found in filename"
 }`;
 
   try {
-    // Try using VLM with the PDF
-    const response = await zai.chat.completions.createVision({
+    // Use regular LLM (not Vision) for PDF analysis
+    const response = await zai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "user",
-          content: [
-            { type: "text", text: classificationPrompt },
-            { type: "image_url", image_url: { url: dataUrl } }
-          ]
+          content: classificationPrompt
         }
       ],
-      thinking: { type: "disabled" }
     });
 
     const content = response.choices?.[0]?.message?.content || "";
@@ -1167,61 +1165,139 @@ Respond in JSON format:
         importance: parsed.importance || "LOW"
       };
       
+      // Extract data based on document type
       let claimData: ClaimFormData | undefined;
       let policyData: PolicyScheduleData | undefined;
       
-      // Extract detailed data based on document type
       if (classification.documentType === "CLAIM_FORM") {
-        claimData = await extractClaimFormData(dataUrl, fileName, companyContext);
+        // Create claim data with extracted info
+        claimData = {
+          ...getEmptyClaimFormData(),
+          claimNumber: parsed.possibleClaimNumber || null,
+          policyNumber: parsed.possiblePolicyNumber || null,
+          extractionConfidence: 30,
+          extractedFields: parsed.possibleClaimNumber ? ['claimNumber'] : []
+        };
       } else if (classification.documentType === "POLICY_SCHEDULE") {
-        policyData = await extractPolicyScheduleData(dataUrl, fileName, companyContext);
+        // Create policy data with extracted info
+        policyData = {
+          ...getEmptyPolicyScheduleData(),
+          policyNumber: parsed.possiblePolicyNumber || null,
+          extractionConfidence: 30,
+          extractedFields: parsed.possiblePolicyNumber ? ['policyNumber'] : []
+        };
       }
+      
+      console.log(`[analyzePdfWithLlm] Classified ${fileName} as ${classification.documentType} (confidence: ${classification.confidence})`);
       
       return {
         classification,
-        extractedText: parsed.extractedText || "",
+        extractedText: `Filename: ${fileName}`,
         claimData,
         policyData
       };
     }
   } catch (error) {
-    console.error("PDF VLM analysis failed, falling back to basic classification:", error);
+    console.error(`[analyzePdfWithLlm] LLM analysis failed for ${fileName}:`, error);
   }
   
   // Fallback: Use basic classification based on filename
+  return classifyPdfByFilename(fileName);
+}
+
+/**
+ * Classify PDF by filename patterns
+ */
+function classifyPdfByFilename(fileName: string): {
+  classification: DocumentClassification;
+  extractedText: string;
+  claimData?: ClaimFormData;
+  policyData?: PolicyScheduleData;
+} {
   const lowerFileName = fileName.toLowerCase();
   let documentType: DocumentType = "OTHER";
   let isClaimRelated = false;
   let importance: "HIGH" | "MEDIUM" | "LOW" = "LOW";
+  let confidence = 30;
+  let policyNumber: string | null = null;
+  let claimNumber: string | null = null;
   
-  if (lowerFileName.includes("claim") || lowerFileName.includes("claimform")) {
+  // Extract potential policy/claim numbers from filename
+  const policyMatch = fileName.match(/([A-Z]{2,5}[A-Z]?\d{6,12})/i);
+  if (policyMatch) {
+    policyNumber = policyMatch[1];
+  }
+  
+  const claimMatch = fileName.match(/(STM|OUT|HOL|OMN|DIS|AF|PSG)[-_]?\d{4,6}[-_]?\d{4,8}/i);
+  if (claimMatch) {
+    claimNumber = claimMatch[0];
+  }
+  
+  if (lowerFileName.includes("claim") && (lowerFileName.includes("form") || lowerFileName.includes("submission"))) {
     documentType = "CLAIM_FORM";
     isClaimRelated = true;
     importance = "HIGH";
-  } else if (lowerFileName.includes("policy") || lowerFileName.includes("schedule")) {
+    confidence = 50;
+  } else if (lowerFileName.includes("policy") || lowerFileName.includes("schedule") || policyNumber) {
     documentType = "POLICY_SCHEDULE";
     isClaimRelated = true;
     importance = "HIGH";
-  } else if (lowerFileName.includes("invoice") || lowerFileName.includes("statement")) {
-    documentType = "INVOICE";
-    importance = "MEDIUM";
-  } else if (lowerFileName.includes("quote") || lowerFileName.includes("quotation")) {
-    documentType = "QUOTATION";
-  } else if (lowerFileName.includes("police") || lowerFileName.includes("cas")) {
+    confidence = policyNumber ? 60 : 40;
+  } else if (lowerFileName.includes("police") || lowerFileName.includes("cas ")) {
     documentType = "POLICE_REPORT";
     isClaimRelated = true;
     importance = "HIGH";
+    confidence = 50;
+  } else if (lowerFileName.includes("invoice") || lowerFileName.includes("statement")) {
+    documentType = "INVOICE";
+    importance = "MEDIUM";
+    confidence = 50;
+  } else if (lowerFileName.includes("quote") || lowerFileName.includes("quotation")) {
+    documentType = "QUOTATION";
+    confidence = 50;
+  } else if (policyNumber) {
+    // If we found a policy number pattern, likely a policy document
+    documentType = "POLICY_SCHEDULE";
+    isClaimRelated = true;
+    importance = "HIGH";
+    confidence = 55;
   }
   
+  const classification: DocumentClassification = {
+    documentType,
+    confidence,
+    reasoning: `Classified based on filename pattern. ${policyNumber ? `Policy number detected: ${policyNumber}. ` : ''}Recommend manual review for confirmation.`,
+    isClaimRelated,
+    importance
+  };
+  
+  let claimData: ClaimFormData | undefined;
+  let policyData: PolicyScheduleData | undefined;
+  
+  if (documentType === "CLAIM_FORM") {
+    claimData = {
+      ...getEmptyClaimFormData(),
+      claimNumber,
+      policyNumber,
+      extractionConfidence: confidence,
+      extractedFields: [claimNumber ? 'claimNumber' : '', policyNumber ? 'policyNumber' : ''].filter(Boolean)
+    };
+  } else if (documentType === "POLICY_SCHEDULE") {
+    policyData = {
+      ...getEmptyPolicyScheduleData(),
+      policyNumber,
+      extractionConfidence: confidence,
+      extractedFields: policyNumber ? ['policyNumber'] : []
+    };
+  }
+  
+  console.log(`[classifyPdfByFilename] Classified ${fileName} as ${documentType} (policy#: ${policyNumber}, claim#: ${claimNumber})`);
+  
   return {
-    classification: {
-      documentType,
-      confidence: 30,
-      reasoning: `Classified based on filename pattern. PDF content analysis unavailable - recommend manual review.`,
-      isClaimRelated,
-      importance
-    },
-    extractedText: ""
+    classification,
+    extractedText: `Filename: ${fileName}. Detected policy number: ${policyNumber || 'none'}`,
+    claimData,
+    policyData
   };
 }
 
