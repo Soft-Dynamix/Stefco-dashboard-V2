@@ -64,6 +64,7 @@ import {
   FileSearch,
   AlertTriangle,
   FileCheck,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
@@ -743,6 +744,48 @@ export function InboxSection() {
       toast({
         title: "Download Failed",
         description: error instanceof Error ? error.message : "Could not download attachment",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Delete attachment
+  const deleteAttachment = async (emailId: string, filename: string) => {
+    if (!confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/attachments?emailId=${emailId}&filename=${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+      });
+      
+      const json = await res.json();
+      
+      if (res.ok && json.success) {
+        toast({
+          title: "Attachment Deleted",
+          description: `Successfully removed ${filename}`,
+        });
+        // Update the selected email to reflect the change
+        if (selectedEmail) {
+          const updatedAttachments = json.updatedAttachments;
+          setSelectedEmail({
+            ...selectedEmail,
+            attachments: updatedAttachments && updatedAttachments.length > 0 
+              ? JSON.stringify(updatedAttachments) 
+              : "NO_ATTACHMENTS",
+          });
+        }
+        // Refresh the email list
+        fetchEmails(pagination.page);
+      } else {
+        throw new Error(json.error || "Failed to delete attachment");
+      }
+    } catch (error) {
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Could not delete attachment",
         variant: "destructive",
       });
     }
@@ -1679,6 +1722,15 @@ export function InboxSection() {
                                               title="Download"
                                             >
                                               <Download className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              onClick={() => deleteAttachment(selectedEmail.id, att.filename)}
+                                              title="Remove"
+                                            >
+                                              <Trash2 className="h-4 w-4" />
                                             </Button>
                                           </div>
                                         </div>

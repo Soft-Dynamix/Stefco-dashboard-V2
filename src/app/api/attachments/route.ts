@@ -1,7 +1,7 @@
 /**
  * Attachments API
  * 
- * Provides endpoints to retrieve, preview, and download email attachments
+ * Provides endpoints to retrieve, preview, download, and delete email attachments
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -139,6 +139,98 @@ export async function GET(request: NextRequest) {
     console.error("Attachments API error:", error);
     return NextResponse.json(
       { error: "Failed to retrieve attachments" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Remove an attachment from an email
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const emailId = searchParams.get("emailId");
+    const filename = searchParams.get("filename");
+
+    if (!emailId || !filename) {
+      return NextResponse.json(
+        { error: "Both emailId and filename parameters are required" },
+        { status: 400 }
+      );
+    }
+
+    // Get the email with attachments
+    const email = await db.emailQueue.findUnique({
+      where: { id: emailId },
+      select: {
+        id: true,
+        attachments: true,
+      },
+    });
+
+    if (!email) {
+      return NextResponse.json(
+        { error: "Email not found" },
+        { status: 404 }
+      );
+    }
+
+    // Parse attachments
+    let attachments: Array<{
+      filename: string;
+      contentType?: string;
+      mimeType?: string;
+      size?: number;
+      content?: string;
+      contentBase64?: string;
+    }> = [];
+
+    if (email.attachments && email.attachments !== "NO_ATTACHMENTS") {
+      try {
+        attachments = JSON.parse(email.attachments);
+      } catch {
+        return NextResponse.json(
+          { error: "Failed to parse attachments" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Find and remove the attachment
+    const attachmentIndex = attachments.findIndex(
+      (att) => att.filename === filename || decodeURIComponent(att.filename) === filename
+    );
+
+    if (attachmentIndex === -1) {
+      return NextResponse.json(
+        { error: "Attachment not found" },
+        { status: 404 }
+      );
+    }
+
+    // Remove the attachment
+    const removedAttachment = attachments.splice(attachmentIndex, 1)[0];
+
+    // Update the email with the new attachments list
+    const newAttachmentsValue = attachments.length > 0 
+      ? JSON.stringify(attachments) 
+      : "NO_ATTACHMENTS";
+
+    await db.emailQueue.update({
+      where: { id: emailId },
+      data: {
+        attachments: newAttachmentsValue,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Attachment "${removedAttachment.filename}" removed successfully`,
+      updatedAttachments: attachments,
+    });
+  } catch (error) {
+    console.error("Delete attachment error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete attachment" },
       { status: 500 }
     );
   }
