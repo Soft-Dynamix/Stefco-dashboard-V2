@@ -1574,3 +1574,67 @@ Key Changes:
 - witnessNames[], injuriesReported
 - fireReportNumber, causeOfFire, extentOfDamage
 - originalVehicleValue, settlementAmount, financeOutstanding, dateOfTotalLoss
+
+
+---
+Task ID: 53
+Agent: Main Agent
+Task: Implement AI Learning Feedback Loop System
+
+Work Log:
+- User requested: AI should guess all info, then learn from corrections when human creates claim
+- Created FieldAccuracyMetric model to track accuracy per field per domain
+- Created PredictionComparison model to store prediction vs actual comparisons
+- Created prediction-learning.ts library with:
+  - storePredictions(): Store AI guesses when analysis runs
+  - comparePredictionsVsActual(): Compare predictions vs claim data
+  - updateFieldAccuracyMetrics(): Track accuracy per field per domain
+  - createLearningPattern(): Learn from corrections
+  - checkAutoClaimReadiness(): Check if domain ready for auto-claim
+  - getDomainLearningProgress(): Get overall learning progress
+- Created /api/learning-feedback API endpoint
+- Updated claims POST API to trigger learning when claim is created
+- Updated unified analysis to store predictions for later comparison
+
+Stage Summary:
+- Complete learning feedback loop implemented
+- AI predictions are stored when analysis runs
+- When human creates claim, predictions are compared vs actual
+- Field-level accuracy metrics are tracked per domain
+- System learns from corrections and improves over time
+- Auto-claim readiness is checked after each claim creation
+
+Files Created:
+- src/lib/prediction-learning.ts - Learning feedback system
+- src/app/api/learning-feedback/route.ts - Learning API endpoint
+
+Files Modified:
+- prisma/schema.prisma - Added FieldAccuracyMetric and PredictionComparison models
+- src/app/api/claims/route.ts - Added learning feedback trigger
+- src/lib/attachment-ai-analyzer.ts - Added prediction storage
+
+Database Changes:
+- Added FieldAccuracyMetric table (tracks accuracy per field per domain)
+- Added PredictionComparison table (stores prediction vs actual comparisons)
+
+Learning Flow:
+1. AI analyzes email → makes educated guesses → stores predictions
+2. Human reviews and creates claim with correct data
+3. System compares predictions vs actual claim data
+4. Field accuracy metrics are updated (per domain, per field)
+5. Learning patterns are created from corrections
+6. When accuracy reaches 90%+ for critical fields → auto-claim ready
+
+Auto-Claim Thresholds:
+- Critical fields (claimNumber, policyNumber, clientName, claimType) must be 90%+ accurate
+- At least 10 predictions per field required
+- Average accuracy must be 85%+
+- Domain must have patterns for 3+ critical fields at 90%+
+
+Accuracy Tracking Per Field:
+- totalPredictions: How many times this field was predicted
+- correctPredictions: How many were correct
+- accuracyRate: Percentage correct (0-100)
+- recentAccuracy: Last 10 predictions accuracy
+- trendDirection: improving/declining/stable
+- readyForAutoClaim: Boolean if 90%+ accuracy with 10+ samples

@@ -384,6 +384,76 @@ model SenderLearningProfile {
   @@map("sender_learning_profiles")
 }
 
+/// Field-level accuracy tracking for learning
+model FieldAccuracyMetric {
+  id                String   @id @default(cuid())
+  senderDomain      String
+  
+  // Which field this tracks
+  fieldName         String   // claimNumber, policyNumber, clientName, vehicleReg, etc.
+  claimType         String?  // MOTOR, PROPERTY, etc. (null = universal)
+  
+  // Accuracy statistics
+  totalPredictions  Int      @default(0)
+  correctPredictions Int     @default(0)
+  correctedCount    Int      @default(0)
+  accuracyRate      Float    @default(0)  // 0-100
+  
+  // Learning progress
+  recentAccuracy    Float    @default(0)  // Last 10 predictions accuracy
+  trendDirection    String   @default("stable")  // improving, declining, stable
+  
+  // Confidence calibration
+  avgConfidence     Float    @default(0)  // Average AI confidence
+  confidenceAccuracyCorrelation Float @default(0)  // How well confidence predicts accuracy
+  
+  // Auto-claim threshold tracking
+  readyForAutoClaim Boolean  @default(false)
+  autoClaimThreshold Float   @default(90)  // Minimum accuracy for auto-claim
+  
+  // Timestamps
+  lastPredictionAt  DateTime?
+  lastCorrectionAt  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([senderDomain, fieldName, claimType])
+  @@index([senderDomain])
+  @@index([readyForAutoClaim])
+  @@map("field_accuracy_metrics")
+}
+
+/// Prediction vs Actual comparison for learning
+model PredictionComparison {
+  id                String   @id @default(cuid())
+  emailQueueId      String
+  claimId           String?  // The actual claim created
+  
+  // Sender context
+  senderDomain      String?
+  
+  // Claim type
+  claimType         String?
+  
+  // Field-level comparison (JSON array of field comparisons)
+  comparisons       String   // JSON: [{field, predicted, actual, confidence, isCorrect}]
+  
+  // Overall metrics
+  totalFields       Int      @default(0)
+  correctFields     Int      @default(0)
+  accuracyRate      Float    @default(0)
+  
+  // Learning applied
+  learningApplied   Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+
+  @@index([emailQueueId])
+  @@index([claimId])
+  @@index([senderDomain])
+  @@map("prediction_comparisons")
+}
+
 /// Auto-ignore rules for non-claim email senders
 model SenderIgnoreRule {
   id            String   @id @default(cuid())

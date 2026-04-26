@@ -2189,6 +2189,9 @@ Respond in JSON format:
         }
       });
       
+      // Store predictions for later learning comparison
+      await storePredictionsForLearning(emailId, result, emailData.from);
+      
       // Update or create attachment summary
       const hasClaimForm = attachmentResults.some(r => r.classification.documentType === "CLAIM_FORM");
       const hasPolicySchedule = attachmentResults.some(r => r.classification.documentType === "POLICY_SCHEDULE");
@@ -2320,4 +2323,50 @@ Respond in JSON format:
     isReadyForProcessing: false,
     recommendedAction: "MANUAL_REVIEW"
   };
+}
+
+/**
+ * Store predictions for later learning comparison
+ */
+async function storePredictionsForLearning(
+  emailId: string,
+  result: UnifiedAnalysisResult,
+  fromEmail?: string | null
+): Promise<void> {
+  try {
+    // Build predictions array from extracted data
+    const predictions: Array<{
+      field: string;
+      predicted: string | number | null;
+      confidence: number;
+      source: string;
+    }> = [];
+    
+    for (const [field, value] of Object.entries(result.extractedData)) {
+      if (value !== null && value !== undefined && value !== "") {
+        predictions.push({
+          field,
+          predicted: typeof value === "object" ? JSON.stringify(value) : String(value),
+          confidence: result.confidence,
+          source: result.dataSources[field] || "attachment"
+        });
+      }
+    }
+    
+    // Store prediction record
+    await db.prediction.create({
+      data: {
+        emailQueueId: emailId,
+        predictedClass: result.classification,
+        confidence: result.confidence,
+        extractedFields: JSON.stringify(predictions),
+        reasoning: result.reasoning,
+        decision: result.recommendedAction
+      }
+    });
+    
+    console.log(`[prediction-learning] Stored ${predictions.length} predictions for email ${emailId}`);
+  } catch (error) {
+    console.error("[prediction-learning] Failed to store predictions:", error);
+  }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { learnExtractionPattern, ExtractableField } from "@/lib/extraction-patterns";
+import { comparePredictionsVsActual, checkAutoClaimReadiness } from "@/lib/prediction-learning";
 
 export async function GET(request: NextRequest) {
   try {
@@ -146,6 +147,42 @@ export async function POST(request: NextRequest) {
     if (body.sourceEmailDomain && body.insuranceCompanyId) {
       await linkDomainToCompany(body.sourceEmailDomain, body.insuranceCompanyId)
         .catch(err => console.error("Failed to link domain:", err));
+    }
+
+    // ====== PREDICTION LEARNING FEEDBACK ======
+    // Compare AI predictions against actual claim data
+    if (body.sourceEmailId) {
+      const actualData = {
+        claimNumber: body.claimNumber,
+        policyNumber: body.policyNumber,
+        claimType: body.claimType,
+        clientName: body.clientName,
+        clientEmail: body.clientEmail,
+        clientPhone: body.clientPhone,
+        clientAddress: body.propertyAddress,
+        vehicleRegistration: body.vehicleRegistration,
+        vehicleMake: body.vehicleMake,
+        vehicleModel: body.vehicleModel,
+        incidentDate: body.incidentDate,
+        incidentDescription: body.incidentDescription,
+        excessAmount: body.excessAmount,
+      };
+      
+      // Compare predictions vs actual (triggers learning)
+      const learningResult = await comparePredictionsVsActual(body.sourceEmailId, claim.id, actualData)
+        .catch(err => console.error("Failed to compare predictions:", err));
+      
+      if (learningResult) {
+        console.log(`[claims] Learning result: ${learningResult.correctFields}/${learningResult.totalFields} correct (${learningResult.accuracyRate.toFixed(1)}%)`);
+        
+        // Check if domain is now ready for auto-claim
+        if (body.sourceEmailDomain) {
+          const autoReady = await checkAutoClaimReadiness(body.sourceEmailDomain);
+          if (autoReady) {
+            console.log(`[claims] Domain ${body.sourceEmailDomain} is now ready for auto-claim!`);
+          }
+        }
+      }
     }
 
     return NextResponse.json(claim);
