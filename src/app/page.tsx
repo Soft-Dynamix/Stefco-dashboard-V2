@@ -10,6 +10,7 @@ import { PrintQueueSection } from "@/components/sections/print-queue-section";
 import { AuditLogSection } from "@/components/sections/audit-log-section";
 import { AnalyticsSection } from "@/components/sections/analytics-section";
 import { SettingsSection } from "@/components/sections/settings-section";
+import { FileManagerSection } from "@/components/sections/file-manager-section";
 
 export default function Page() {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -45,6 +46,8 @@ export default function Page() {
         return <AnalyticsSection />;
       case "settings":
         return <SettingsSection />;
+      case "files":
+        return <FileManagerSection />;
       default:
         return <DashboardSection />;
     }

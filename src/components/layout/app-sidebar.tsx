@@ -10,6 +10,7 @@ import {
   History,
   Printer,
   BarChart3,
+  FolderOpen,
 } from "lucide-react";
 
 import {
@@ -58,6 +59,11 @@ const managementItems = [
     title: "Insurance Companies",
     url: "/#insurance",
     icon: Building2,
+  },
+  {
+    title: "Files",
+    url: "/#files",
+    icon: FolderOpen,
   },
   {
     title: "Print Queue",
