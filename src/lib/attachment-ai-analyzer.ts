@@ -1742,7 +1742,37 @@ export interface UnifiedAnalysisResult {
     
     // Police report
     policeCaseNumber: string | null;
+    
+    // PROPERTY claim fields
+    propertyAddress: string | null;
+    propertyType: string | null;
+    damageDescription: string | null;
+    estimatedValue: number | null;
+    
+    // THEFT claim fields
+    stolenItems: Array<{ description: string; value: number }>;
+    dateOfDiscovery: string | null;
+    securityMeasures: string | null;
+    
+    // LIABILITY claim fields
+    witnessNames: string[];
+    injuriesReported: boolean | null;
+    
+    // FIRE claim fields
+    fireReportNumber: string | null;
+    causeOfFire: string | null;
+    extentOfDamage: string | null;
+    
+    // GAP claim fields
+    originalVehicleValue: number | null;
+    settlementAmount: number | null;
+    financeOutstanding: number | null;
+    dateOfTotalLoss: string | null;
   };
+  
+  // Claim type identification
+  claimTypeIdentified: string;
+  claimTypeReasoning: string;
   
   // Source tracking - where each piece of data came from
   dataSources: {
@@ -1871,41 +1901,111 @@ ${documentTypeHints || 'No specific guidance available'}
 Claim Data: ${JSON.stringify(combinedClaimData, null, 2)}
 Policy Data: ${JSON.stringify(combinedPolicyData, null, 2)}
 
-=== YOUR TASK ===
-Analyze ALL the above information and extract:
-1. A single unified classification (NEW_CLAIM, IGNORE, MISSING_INFO, OTHER)
-2. Combined extracted data from ALL sources (email body + attachments)
-3. Track where each piece of data came from
-4. Identify key indicators found
-5. List missing critical information
+=== YOUR TASK - TWO PHASE ANALYSIS ===
 
-=== CRITICAL EXTRACTION RULES ===
+**PHASE 1: IDENTIFY CLAIM TYPE FIRST**
+Determine the claim type by analyzing:
+- Email subject (often contains claim type indicators)
+- Document types present (vehicle-related docs = MOTOR)
+- Keywords in content ("accident", "theft", "fire", "property damage", "liability")
 
-**FOR MOTOR CLAIMS:**
-1. QUOTATION documents contain VIN NUMBER and REGISTRATION NUMBER - use these to match/verify the vehicle
-2. CLAIM FORM documents contain INCIDENT DATE and claim-specific details
-3. POLICY SCHEDULE documents contain SUM INSURED, EXCESS, and VEHICLE EXTRAS/SPECIFIED ITEMS
-4. Cross-reference: If quotation has VIN/reg, verify it matches the policy schedule vehicle
+**PHASE 2: APPLY CLAIM-TYPE-SPECIFIC EXTRACTION RULES**
 
-**FOR ALL CLAIMS:**
+=== CLAIM TYPE EXTRACTION RULES ===
+
+**MOTOR CLAIMS - Required Information:**
+- Vehicle Registration Number (SA format: XX XX GP, XX-XX-GP)
+- Vehicle VIN Number (17 characters)
+- Vehicle Make, Model, Year, Color
+- Driver Name and ID (if different from policy holder)
+- Incident Date, Time, Location
+- Third Party Details (name, vehicle reg, insurance)
+- Source Priority for VIN/Reg: QUOTATION → POLICY_SCHEDULE → CLAIM_FORM
+
+**PROPERTY CLAIMS - Required Information:**
+- Property Address (full address)
+- Property Type (house, apartment, commercial, etc.)
+- Damage Description (detailed)
+- Estimated Value / Sum Insured
+- Incident Date
+- Photos of damage (if attached)
+
+**THEFT CLAIMS - Required Information:**
+- Police Case Number (CAS number)
+- Date/Time of Discovery
+- List of Stolen Items with values
+- Security Measures in place
+- Proof of Ownership (receipts, photos)
+
+**LIABILITY CLAIMS - Required Information:**
+- Third Party Name and Contact Details
+- Incident Description (detailed)
+- Witness Information
+- Location of Incident
+- Any injuries reported
+
+**FIRE CLAIMS - Required Information:**
+- Fire Department Report Number
+- Cause of Fire (if known)
+- Extent of Damage
+- Affected Areas/Items
+- Incident Date
+
+**GAP CLAIMS - Required Information:**
+- Original Vehicle Value
+- Insurance Settlement Amount
+- Finance/Loan Amount Outstanding
+- Vehicle Details
+- Date of Total Loss
+
+=== UNIVERSAL RULES FOR ALL CLAIM TYPES ===
 - Cross-reference data between email body and ALL attachments
 - If email body mentions a claim number but attachment has more details, combine them
 - If there are conflicts, prefer attachment data for claim details
 - Be thorough - check ALL attachments for relevant information
 - South African formats: vehicle reg (XX XX GP, XX-XX-GP), phone (+27/0 prefix), ID (13 digits)
 
-**DATA EXTRACTION PRIORITY:**
-1. VIN/Registration: Check QUOTATION first, then POLICY_SCHEDULE, then CLAIM_FORM
-2. Incident Details: Check CLAIM_FORM first, then email body
-3. Sum Insured/Excess: Check POLICY_SCHEDULE only
-4. Client Details: Check all documents, prefer POLICY_SCHEDULE for insured info
+=== MISSING INFORMATION CHECKLIST BY CLAIM TYPE ===
+
+For MOTOR claims, flag as missing if not found:
+- vehicleRegistration OR vehicleVinNumber
+- incidentDate
+- driverName (or policyHolderName)
+
+For PROPERTY claims, flag as missing if not found:
+- clientAddress (property address)
+- incidentDescription (damage details)
+- incidentDate
+
+For THEFT claims, flag as missing if not found:
+- policeCaseNumber
+- incidentDescription (what was stolen)
+- incidentDate
+
+For LIABILITY claims, flag as missing if not found:
+- thirdPartyName
+- incidentDescription
+- incidentDate
+
+For FIRE claims, flag as missing if not found:
+- incidentDate
+- incidentDescription (damage extent)
+- incidentLocation
+
+For GAP claims, flag as missing if not found:
+- vehicleRegistration OR vehicleVinNumber
+- sumInsured (settlement)
+- incidentDate
 
 Respond in JSON format:
 {
   "classification": "NEW_CLAIM|IGNORE|MISSING_INFO|OTHER",
   "confidence": 0-100,
   "reasoning": "Comprehensive explanation considering ALL sources",
+  "claimTypeIdentified": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER",
+  "claimTypeReasoning": "Why this claim type was identified",
   "extractedData": {
+    // Universal fields
     "claimNumber": "from email or attachment or null",
     "policyNumber": "from email or attachment or null",
     "claimType": "MOTOR|PROPERTY|LIABILITY|THEFT|FIRE|GAP|OTHER|null",
@@ -1918,6 +2018,12 @@ Respond in JSON format:
     "clientPhone": "phone or null",
     "clientEmail": "email or null",
     "clientAddress": "address or null",
+    "insuranceCompany": "company name or null",
+    "policyInceptionDate": "YYYY-MM-DD or null",
+    "policyExpiryDate": "YYYY-MM-DD or null",
+    "policeCaseNumber": "CAS number or null",
+    
+    // MOTOR claim fields
     "vehicleRegistration": "SA vehicle reg or null",
     "vehicleMake": "make or null",
     "vehicleModel": "model or null",
@@ -1935,10 +2041,32 @@ Respond in JSON format:
     "benefits": ["list of benefits from policy schedule"],
     "extensions": ["list of extensions from policy schedule"],
     "specifiedItems": ["list of specified/extras items from policy schedule"],
-    "insuranceCompany": "company name or null",
-    "policyInceptionDate": "YYYY-MM-DD or null",
-    "policyExpiryDate": "YYYY-MM-DD or null",
-    "policeCaseNumber": "CAS number or null"
+    
+    // PROPERTY claim fields
+    "propertyAddress": "full property address or null",
+    "propertyType": "house|apartment|commercial|industrial|other|null",
+    "damageDescription": "detailed damage description or null",
+    "estimatedValue": number or null,
+    
+    // THEFT claim fields
+    "stolenItems": [{"description": "item", "value": number}],
+    "dateOfDiscovery": "YYYY-MM-DD or null",
+    "securityMeasures": "description of security or null",
+    
+    // LIABILITY claim fields
+    "witnessNames": ["witness names"],
+    "injuriesReported": true/false,
+    
+    // FIRE claim fields
+    "fireReportNumber": "fire department report number or null",
+    "causeOfFire": "known cause or null",
+    "extentOfDamage": "description or null",
+    
+    // GAP claim fields
+    "originalVehicleValue": number or null,
+    "settlementAmount": number or null,
+    "financeOutstanding": number or null,
+    "dateOfTotalLoss": "YYYY-MM-DD or null"
   },
   "dataSources": {
     "claimNumber": "email_body|attachment|null",
@@ -1965,12 +2093,72 @@ Respond in JSON format:
     
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      const extractedData = parsed.extractedData || {};
       
       const result: UnifiedAnalysisResult = {
         classification: parsed.classification || "OTHER",
         confidence: parsed.confidence || 50,
         reasoning: parsed.reasoning || "Unable to determine classification",
-        extractedData: parsed.extractedData || {},
+        claimTypeIdentified: parsed.claimTypeIdentified || extractedData.claimType || "OTHER",
+        claimTypeReasoning: parsed.claimTypeReasoning || "Claim type identified from available information",
+        extractedData: {
+          // Universal fields
+          claimNumber: extractedData.claimNumber || null,
+          policyNumber: extractedData.policyNumber || null,
+          claimType: extractedData.claimType || null,
+          incidentDate: extractedData.incidentDate || null,
+          incidentTime: extractedData.incidentTime || null,
+          incidentLocation: extractedData.incidentLocation || null,
+          incidentDescription: extractedData.incidentDescription || null,
+          clientName: extractedData.clientName || null,
+          clientIdNumber: extractedData.clientIdNumber || null,
+          clientPhone: extractedData.clientPhone || null,
+          clientEmail: extractedData.clientEmail || null,
+          clientAddress: extractedData.clientAddress || null,
+          insuranceCompany: extractedData.insuranceCompany || null,
+          policyInceptionDate: extractedData.policyInceptionDate || null,
+          policyExpiryDate: extractedData.policyExpiryDate || null,
+          policeCaseNumber: extractedData.policeCaseNumber || null,
+          // Motor fields
+          vehicleRegistration: extractedData.vehicleRegistration || null,
+          vehicleMake: extractedData.vehicleMake || null,
+          vehicleModel: extractedData.vehicleModel || null,
+          vehicleYear: extractedData.vehicleYear || null,
+          vehicleColor: extractedData.vehicleColor || null,
+          vehicleVinNumber: extractedData.vehicleVinNumber || null,
+          driverName: extractedData.driverName || null,
+          driverIdNumber: extractedData.driverIdNumber || null,
+          thirdPartyName: extractedData.thirdPartyName || null,
+          thirdPartyVehicleReg: extractedData.thirdPartyVehicleReg || null,
+          excessAmount: extractedData.excessAmount || null,
+          estimatedDamage: extractedData.estimatedDamage || null,
+          sumInsured: extractedData.sumInsured || null,
+          premium: extractedData.premium || null,
+          benefits: extractedData.benefits || [],
+          extensions: extractedData.extensions || [],
+          specifiedItems: extractedData.specifiedItems || [],
+          // Property fields
+          propertyAddress: extractedData.propertyAddress || null,
+          propertyType: extractedData.propertyType || null,
+          damageDescription: extractedData.damageDescription || null,
+          estimatedValue: extractedData.estimatedValue || null,
+          // Theft fields
+          stolenItems: extractedData.stolenItems || [],
+          dateOfDiscovery: extractedData.dateOfDiscovery || null,
+          securityMeasures: extractedData.securityMeasures || null,
+          // Liability fields
+          witnessNames: extractedData.witnessNames || [],
+          injuriesReported: extractedData.injuriesReported || null,
+          // Fire fields
+          fireReportNumber: extractedData.fireReportNumber || null,
+          causeOfFire: extractedData.causeOfFire || null,
+          extentOfDamage: extractedData.extentOfDamage || null,
+          // GAP fields
+          originalVehicleValue: extractedData.originalVehicleValue || null,
+          settlementAmount: extractedData.settlementAmount || null,
+          financeOutstanding: extractedData.financeOutstanding || null,
+          dateOfTotalLoss: extractedData.dateOfTotalLoss || null
+        },
         dataSources: parsed.dataSources || {},
         keyIndicators: parsed.keyIndicators || [],
         missingInformation: parsed.missingInformation || [],
@@ -2056,7 +2244,66 @@ Respond in JSON format:
     classification: "OTHER",
     confidence: 0,
     reasoning: "Failed to perform unified analysis",
-    extractedData: {},
+    claimTypeIdentified: "OTHER",
+    claimTypeReasoning: "Analysis failed - could not determine claim type",
+    extractedData: {
+      // Universal fields
+      claimNumber: null,
+      policyNumber: null,
+      claimType: null,
+      incidentDate: null,
+      incidentTime: null,
+      incidentLocation: null,
+      incidentDescription: null,
+      clientName: null,
+      clientIdNumber: null,
+      clientPhone: null,
+      clientEmail: null,
+      clientAddress: null,
+      insuranceCompany: null,
+      policyInceptionDate: null,
+      policyExpiryDate: null,
+      policeCaseNumber: null,
+      // Motor fields
+      vehicleRegistration: null,
+      vehicleMake: null,
+      vehicleModel: null,
+      vehicleYear: null,
+      vehicleColor: null,
+      vehicleVinNumber: null,
+      driverName: null,
+      driverIdNumber: null,
+      thirdPartyName: null,
+      thirdPartyVehicleReg: null,
+      excessAmount: null,
+      estimatedDamage: null,
+      sumInsured: null,
+      premium: null,
+      benefits: [],
+      extensions: [],
+      specifiedItems: [],
+      // Property fields
+      propertyAddress: null,
+      propertyType: null,
+      damageDescription: null,
+      estimatedValue: null,
+      // Theft fields
+      stolenItems: [],
+      dateOfDiscovery: null,
+      securityMeasures: null,
+      // Liability fields
+      witnessNames: [],
+      injuriesReported: null,
+      // Fire fields
+      fireReportNumber: null,
+      causeOfFire: null,
+      extentOfDamage: null,
+      // GAP fields
+      originalVehicleValue: null,
+      settlementAmount: null,
+      financeOutstanding: null,
+      dateOfTotalLoss: null
+    },
     dataSources: {},
     keyIndicators: [],
     missingInformation: ["Analysis failed"],

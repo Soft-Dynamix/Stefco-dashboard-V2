@@ -1510,3 +1510,67 @@ Data Extraction Priority (for Motor Claims):
 2. Incident Details: CLAIM_FORM → email body
 3. Sum Insured/Excess: POLICY_SCHEDULE only
 4. Client Details: All documents, prefer POLICY_SCHEDULE for insured info
+
+
+---
+Task ID: 52
+Agent: Main Agent
+Task: Implement Claim-Type-Specific Extraction Logic
+
+Work Log:
+- User feedback: AI should identify claim type FIRST, then extract based on type
+- Implemented two-phase analysis:
+  - Phase 1: Identify claim type from email subject, documents, keywords
+  - Phase 2: Apply claim-type-specific extraction rules
+- Added comprehensive claim type extraction rules for all 6 claim types:
+  - MOTOR: Vehicle details (VIN, reg), driver, third party, incident
+  - PROPERTY: Property address, damage description, estimated value
+  - THEFT: Police case, stolen items list, security measures
+  - LIABILITY: Third party details, witnesses, injuries
+  - FIRE: Fire report, cause, extent of damage
+  - GAP: Original value, settlement, finance outstanding
+- Added claim-type-specific missing information checklist
+- Added new fields to UnifiedAnalysisResult interface
+- Updated result parsing with proper defaults for all new fields
+
+Stage Summary:
+- AI now identifies claim type before extracting data
+- Each claim type has specific required fields
+- Missing information is flagged based on claim type
+- More accurate extraction for non-motor claims
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts - Two-phase analysis, claim-type-specific rules
+
+Key Changes:
+
+**Two-Phase Analysis:**
+1. Phase 1: Identify claim type from:
+   - Email subject (often contains claim type indicators)
+   - Document types present (vehicle docs = MOTOR)
+   - Keywords ("accident", "theft", "fire", etc.)
+
+2. Phase 2: Apply type-specific extraction:
+   - MOTOR: VIN, registration, vehicle details, driver, third party
+   - PROPERTY: Property address, damage description, value
+   - THEFT: Police case, stolen items, security measures
+   - LIABILITY: Third party, witnesses, injuries
+   - FIRE: Fire report, cause, damage extent
+   - GAP: Original value, settlement, finance details
+
+**Missing Information by Claim Type:**
+- MOTOR: vehicleReg/VIN, incidentDate, driverName
+- PROPERTY: clientAddress, incidentDescription, incidentDate
+- THEFT: policeCaseNumber, incidentDescription, incidentDate
+- LIABILITY: thirdPartyName, incidentDescription, incidentDate
+- FIRE: incidentDate, incidentDescription, incidentLocation
+- GAP: vehicleReg/VIN, sumInsured, incidentDate
+
+**New Fields Added:**
+- claimTypeIdentified: string
+- claimTypeReasoning: string
+- propertyAddress, propertyType, damageDescription, estimatedValue
+- stolenItems[], dateOfDiscovery, securityMeasures
+- witnessNames[], injuriesReported
+- fireReportNumber, causeOfFire, extentOfDamage
+- originalVehicleValue, settlementAmount, financeOutstanding, dateOfTotalLoss
