@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-04-27
+
+### Added
+- **AI-Powered Attachment Analysis** - Intelligent document processing for claim detection
+  - Document type classification (15 types: CLAIM_FORM, POLICY_SCHEDULE, INVOICE, etc.)
+  - Claim form data extraction using VLM (Vision Language Model)
+  - Policy schedule data extraction (policy numbers, coverage, insured items)
+  - Claim likelihood scoring based on attachment content (0-100)
+  - Learning system for user feedback on extracted data
+  - South African specific patterns (vehicle regs, phone numbers, ID numbers)
+
+- **Attachments Tab in Email Details** - New UI for attachment viewing
+  - List of attachments with file type icons
+  - "Claim Document" badges for likely claim-related files
+  - "Analyze Attachments" button for on-demand AI analysis
+  - Claim detection hints showing likely claim documents
+  - File type indicators (PDF, Image, DOC)
+
+- **Attachment Analysis API** - New endpoint for document processing
+  - POST /api/attachment-analysis - Analyze attachments
+  - GET /api/attachment-analysis - Retrieve results
+  - Feedback submission for learning
+
+- **Email Processing Integration** - Attachments considered in classification
+  - Attachment name detection for claim-related files
+  - Confidence boost when claim documents detected
+  - Attachment summary placeholder created for all emails
+
+### Database
+- `AttachmentAnalysis` model - Stores per-attachment AI analysis results
+- `AttachmentLearning` model - Records user corrections for learning
+- `EmailAttachmentSummary` model - Email-level summary for claim detection
+
+### Document Types Classified
+- `CLAIM_FORM` - Claim submission forms, incident reports (HIGH relevance)
+- `POLICY_SCHEDULE` - Insurance policy documents, certificates (HIGH relevance)
+- `POLICE_REPORT` - Police case reports, accident case numbers (HIGH relevance)
+- `MEDICAL_REPORT` - Medical reports, hospital documentation (MEDIUM relevance)
+- `VEHICLE_ASSESSMENT` - Vehicle damage assessments (MEDIUM relevance)
+- `REPAIR_QUOTE` - Repair estimates, body shop quotes (MEDIUM relevance)
+- `PHOTO_EVIDENCE` - Photos of damage, accidents (MEDIUM relevance)
+- Plus 8 more document types
+
+### Key Insight Implemented
+Not all emails with attachments are claims. Real claims typically have:
+- Claim Form with incident details
+- Policy Schedule with coverage info
+- Supporting documents (photos, police reports)
+
+The system now analyzes attachment content, not just filenames, to determine if an email is truly a new claim.
+
 ## [2.2.0] - 2025-04-26
 
 ### Added
@@ -145,6 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 2.3.0 | 2025-04-27 | AI attachment analysis, document classification, claim likelihood scoring |
 | 2.2.0 | 2025-04-26 | Bulk operations, HTML email rendering, AI auto-fill, encoding fixes |
 | 2.1.0 | 2025-04-26 | Archive system, pagination, auto-analysis |
 | 2.0.0 | 2025-04-25 | Complete redesign, AI pipeline, learning engine |
@@ -152,13 +204,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Upcoming Features (Roadmap)
 
-### v2.3.0 (Planned)
+### v2.4.0 (Planned)
 - [ ] Advanced search with date range filters
 - [ ] Email export to CSV/Excel
 - [ ] Dashboard widget customization
 - [ ] Real-time notifications with WebSocket
 
-### v2.4.0 (Planned)
+### v2.5.0 (Planned)
 - [ ] Email threading visualization
 - [ ] Advanced analytics charts
 - [ ] API rate limiting

@@ -15,6 +15,14 @@ STEFCO Claims Dashboard is a comprehensive claims management platform that autom
 - **Learning Engine** - Pattern learning from user corrections
 - **Attachment Processing** - VLM-based extraction from images/PDFs
 
+### Attachment Intelligence (v2.3.0)
+- **AI Document Classification** - Classifies attachments into 15 document types
+- **Claim Form Extraction** - Extracts claim number, policy holder, vehicle details
+- **Policy Schedule Extraction** - Extracts policy numbers, coverage, insured items
+- **Claim Likelihood Scoring** - Scores emails 0-100 based on attachment content
+- **Smart Detection** - Distinguishes between actual claims and other documents
+- **Learning from Corrections** - Improves accuracy from user feedback
+
 ### Email Management (v2.2.0)
 - **Bulk Email Operations** - Select multiple emails and archive/unarchive at once
 - **HTML Email Rendering** - View original email formatting with images, tables, signatures
@@ -82,6 +90,7 @@ src/
     ├── email-poller.ts         # IMAP email fetching with decoding
     ├── extraction-patterns.ts  # Pattern learning utilities
     ├── attachment-processor.ts # VLM attachment extraction
+    ├── attachment-ai-analyzer.ts # AI document classification & extraction
     └── enhanced-learning.ts    # Advanced learning engine
 
 prisma/
@@ -133,6 +142,13 @@ PUT    /api/email-inbox/[id]# Update email status
 POST   /api/email-poll      # Trigger manual poll
 POST   /api/process-email   # AI classification & extraction
 POST   /api/enhanced-extract # Ensemble extraction with attachments
+POST   /api/attachment-analysis # AI document analysis
+```
+
+### Attachment Analysis (v2.3.0)
+```
+POST   /api/attachment-analysis # Analyze attachments for claim detection
+GET    /api/attachment-analysis # Get analysis results
 ```
 
 ### Learning
@@ -305,9 +321,18 @@ EXPOSE 3000
 CMD ["bun", "run", "start"]
 ```
 
-## Recent Changes (v2.2.0)
+## Recent Changes
 
-### New Features
+### v2.3.0 (2025-04-27)
+- **AI-Powered Attachment Analysis**: Intelligent document processing for claim detection
+- **Document Classification**: Classifies attachments into 15 types (CLAIM_FORM, POLICY_SCHEDULE, etc.)
+- **Claim Form Extraction**: Extracts claim numbers, policy holder info, vehicle details
+- **Policy Schedule Extraction**: Extracts policy numbers, coverage, insured items
+- **Claim Likelihood Scoring**: Scores emails 0-100 based on attachment content
+- **Attachments Tab**: New UI for viewing and analyzing email attachments
+- **Learning System**: Improves accuracy from user feedback on extracted data
+
+### v2.2.0 (2025-04-26)
 - **Bulk Email Operations**: Select multiple emails with checkboxes, archive/unarchive in bulk
 - **HTML Email Rendering**: Toggle between formatted HTML and plain text views
 - **AI Auto-fill**: Smart category and reason suggestions when ignoring emails

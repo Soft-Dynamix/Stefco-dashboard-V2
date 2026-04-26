@@ -622,4 +622,241 @@ Future versions will support webhooks for:
 
 ---
 
-*Last updated: 2025-04-26 (v2.2.0)*
+*Last updated: 2025-04-26 (v2.3.0)*
+
+---
+
+## Attachment Analysis API (v2.3.0)
+
+### Analyze Email Attachments
+
+Trigger AI-powered analysis of email attachments for claim detection.
+
+```http
+POST /api/attachment-analysis
+Content-Type: application/json
+
+{
+  "action": "analyze",
+  "emailId": "email-id",
+  "attachments": [
+    {
+      "filename": "Claim_Form.pdf",
+      "mimeType": "application/pdf",
+      "size": 245000
+    },
+    {
+      "filename": "Policy_Schedule.pdf",
+      "mimeType": "application/pdf",
+      "size": 180000
+    }
+  ],
+  "companyContext": "santam.co.za"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "summary": {
+    "totalAttachments": 2,
+    "claimRelatedAttachments": 2,
+    "hasClaimForm": true,
+    "hasPolicySchedule": true,
+    "hasSupportingDocuments": false,
+    "overallClaimLikelihood": 85.5,
+    "isLikelyNewClaim": true,
+    "confidenceLevel": "HIGH",
+    "assessmentReason": "High likelihood of new claim: Email contains both a claim form and policy schedule...",
+    "keyIndicators": [
+      "Contains claim form",
+      "Contains policy schedule",
+      "Claim number found: STM-2025-00001",
+      "Vehicle registration: CA123456 GP"
+    ],
+    "missingInformation": [],
+    "combinedClaimData": {
+      "claimNumber": "STM-2025-00001",
+      "policyNumber": "POL-123456",
+      "clientName": "John Doe",
+      "vehicleRegistration": "CA123456 GP",
+      "claimType": "MOTOR"
+    }
+  },
+  "analyses": [
+    {
+      "attachmentId": "att-id-1",
+      "fileName": "Claim_Form.pdf",
+      "fileType": "PDF",
+      "classification": {
+        "documentType": "CLAIM_FORM",
+        "confidence": 95,
+        "reasoning": "Document contains claim form fields, incident details, and claim number",
+        "isClaimRelated": true,
+        "importance": "HIGH"
+      },
+      "claimLikelihoodScore": 85,
+      "containsClaimNumber": true,
+      "containsPolicyNumber": false,
+      "containsVehicleReg": true
+    }
+  ]
+}
+```
+
+### Get Attachment Analysis Results
+
+```http
+GET /api/attachment-analysis?emailId=email-id&action=summary
+```
+
+**Response:**
+```json
+{
+  "summary": {
+    "id": "summary-id",
+    "emailQueueId": "email-id",
+    "totalAttachments": 2,
+    "claimRelatedAttachments": 2,
+    "hasClaimForm": true,
+    "hasPolicySchedule": true,
+    "overallClaimLikelihood": 85.5,
+    "isLikelyNewClaim": true,
+    "confidenceLevel": "HIGH",
+    "assessmentReason": "High likelihood of new claim..."
+  },
+  "analyses": [...]
+}
+```
+
+### Submit Feedback for Learning
+
+```http
+POST /api/attachment-analysis
+Content-Type: application/json
+
+{
+  "action": "feedback",
+  "emailId": "email-id",
+  "feedback": {
+    "attachmentId": "att-id",
+    "fieldName": "claimNumber",
+    "originalValue": "STM-2025-000",
+    "correctedValue": "STM-2025-00001"
+  },
+  "companyContext": "santam.co.za"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Feedback recorded successfully"
+}
+```
+
+### Get Learned Patterns
+
+```http
+GET /api/attachment-analysis?action=patterns&companyContext=santam.co.za
+```
+
+**Response:**
+```json
+{
+  "patterns": [
+    {
+      "fieldName": "claimNumber",
+      "patterns": [
+        {
+          "original": "STM-2025-000",
+          "corrected": "STM-2025-00001",
+          "count": 3
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Document Types Classified
+
+| Type | Description | Claim Relevance |
+|------|-------------|-----------------|
+| `CLAIM_FORM` | Claim submission forms, incident reports | HIGH |
+| `POLICY_SCHEDULE` | Insurance policy documents, certificates | HIGH |
+| `INVOICE` | Bills, statements, payment requests | LOW |
+| `QUOTATION` | Quotes, estimates, proposals | LOW |
+| `POLICE_REPORT` | Police case reports, accident case numbers | HIGH |
+| `MEDICAL_REPORT` | Medical reports, hospital documentation | MEDIUM |
+| `VEHICLE_ASSESSMENT` | Vehicle damage assessments | MEDIUM |
+| `REPAIR_QUOTE` | Repair estimates, body shop quotes | MEDIUM |
+| `PHOTO_EVIDENCE` | Photos of damage, accidents | MEDIUM |
+| `IDENTITY_DOCUMENT` | ID cards, passports, driver's licenses | LOW |
+| `PROOF_OF_ADDRESS` | Utility bills, bank statements | LOW |
+| `BANKING_DETAILS` | Bank account details | LOW |
+| `CORRESPONDENCE` | General letters, emails | LOW |
+| `EMAIL_PRINTOUT` | Printed emails | LOW |
+| `OTHER` | Documents that don't fit other categories | LOW |
+
+### Extracted Fields - Claim Form
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `claimNumber` | Claim reference number | STM-2025-00001 |
+| `claimType` | Type of claim | MOTOR, PROPERTY, LIABILITY |
+| `incidentDate` | Date of incident | 2025-04-26 |
+| `incidentLocation` | Where incident occurred | 123 Main St, Johannesburg |
+| `incidentDescription` | What happened | Vehicle collision at intersection |
+| `policyHolderName` | Name of policy holder | John Doe |
+| `policyHolderIdNumber` | SA ID number | 8001015009087 |
+| `policyHolderPhone` | Contact number | 0821234567 |
+| `policyHolderEmail` | Email address | john@example.com |
+| `policyNumber` | Policy reference | POL-123456 |
+| `vehicleRegistration` | Vehicle reg number | CA123456 GP |
+| `vehicleMake` | Vehicle manufacturer | Toyota |
+| `vehicleModel` | Vehicle model | Corolla |
+| `driverName` | Driver name (if different) | Jane Doe |
+| `thirdPartyName` | Third party name | Bob Smith |
+| `excessAmount` | Excess amount | 5000 |
+
+### Extracted Fields - Policy Schedule
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `policyNumber` | Policy reference | POL-123456 |
+| `policyType` | Type of policy | Comprehensive Motor |
+| `insuredName` | Name of insured | John Doe |
+| `insuredIdNumber` | SA ID number | 8001015009087 |
+| `sumInsured` | Coverage amount | 250000 |
+| `premium` | Premium amount | 1500 |
+| `excess` | Excess amount | 5000 |
+| `inceptionDate` | Policy start date | 2024-01-01 |
+| `expiryDate` | Policy end date | 2024-12-31 |
+
+### Claim Likelihood Scoring
+
+The system calculates a claim likelihood score (0-100) based on:
+
+1. **Document Type Weight**:
+   - CLAIM_FORM: +50 points
+   - POLICY_SCHEDULE: +20 points
+   - Supporting documents: +10-30 points
+
+2. **Extracted Data Boosts**:
+   - Claim number found: +15 points
+   - Policy number found: +10 points
+   - Vehicle registration: +5 points
+   - Incident date: +5 points
+   - Client name: +5 points
+
+3. **Document Combination Bonus**:
+   - Claim Form + Policy Schedule: +20 points
+   - Supporting documents present: +5 points
+
+**Interpretation**:
+- **80-100**: HIGH confidence - Likely a new claim
+- **60-79**: MEDIUM confidence - Possible claim
+- **0-59**: LOW confidence - Probably not a new claim
