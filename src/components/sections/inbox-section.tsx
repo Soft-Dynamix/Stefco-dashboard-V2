@@ -690,24 +690,45 @@ export function InboxSection() {
   // Preview attachment
   const previewAttachmentFile = async (emailId: string, filename: string) => {
     try {
-      const res = await fetch(`/api/attachments?action=preview&emailId=${emailId}&filename=${encodeURIComponent(filename)}`);
+      // For PDFs, use the API URL directly in iframe (more reliable than blob URL)
+      const isPdf = filename.toLowerCase().endsWith('.pdf');
+      const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(filename);
       
-      if (!res.ok) {
-        throw new Error("Failed to load attachment");
+      if (isPdf) {
+        // Use API URL directly for PDFs - this works better with iframes
+        const apiUrl = `/api/attachments?action=preview&emailId=${emailId}&filename=${encodeURIComponent(filename)}`;
+        setPreviewAttachment({
+          filename,
+          content: apiUrl,
+          contentType: 'application/pdf',
+        });
+        setPreviewOpen(true);
+      } else if (isImage) {
+        // For images, fetch and create blob URL
+        const res = await fetch(`/api/attachments?action=preview&emailId=${emailId}&filename=${encodeURIComponent(filename)}`);
+        
+        if (!res.ok) {
+          throw new Error("Failed to load attachment");
+        }
+        
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        
+        setPreviewAttachment({
+          filename,
+          content: url,
+          contentType: blob.type || 'image/png',
+        });
+        setPreviewOpen(true);
+      } else {
+        // For other file types, just show download option
+        setPreviewAttachment({
+          filename,
+          content: '',
+          contentType: 'application/octet-stream',
+        });
+        setPreviewOpen(true);
       }
-      
-      const contentType = res.headers.get("Content-Type") || "application/octet-stream";
-      
-      // For images and PDFs, get the blob URL for preview
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      
-      setPreviewAttachment({
-        filename,
-        content: url,
-        contentType,
-      });
-      setPreviewOpen(true);
     } catch (error) {
       toast({
         title: "Preview Failed",
@@ -1965,12 +1986,14 @@ export function InboxSection() {
                   alt={previewAttachment.filename}
                   className="max-w-full max-h-full mx-auto object-contain"
                 />
-              ) : previewAttachment.contentType === 'application/pdf' ? (
-                <iframe
-                  src={previewAttachment.content}
-                  className="w-full h-[70vh] border-0"
-                  title="PDF Preview"
-                />
+              ) : previewAttachment.contentType.includes('pdf') ? (
+                <div className="w-full h-[70vh] flex flex-col">
+                  <iframe
+                    src={previewAttachment.content}
+                    className="flex-1 border-0 rounded"
+                    title="PDF Preview"
+                  />
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <FileText className="h-16 w-16 mb-4 opacity-50" />
