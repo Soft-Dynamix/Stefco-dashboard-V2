@@ -18,6 +18,7 @@
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "./db";
 import { PDFParse } from "pdf-parse";
+import { getClaimNumberFormatHint, getClaimNumberPatternsByDomain, validateClaimNumber } from "./claim-number-patterns";
 
 // Cache ZAI instance
 let zaiInstance: ZAI | null = null;
@@ -1860,6 +1861,9 @@ export async function performUnifiedAnalysis(
   const combinedClaimData = combineClaimFormData(attachmentResults);
   const combinedPolicyData = combinePolicyScheduleData(attachmentResults);
   
+  // Get claim number format hints from learned patterns
+  const claimNumberHint = await getClaimNumberFormatHint(companyContext, emailData.from?.split('@')[1]);
+  
   // Build document-type-specific extraction hints
   const documentTypeHints = attachmentResults.map(r => {
     const hints: string[] = [];
@@ -1900,6 +1904,9 @@ ${documentTypeHints || 'No specific guidance available'}
 === PRE-EXTRACTED DATA FROM ATTACHMENTS ===
 Claim Data: ${JSON.stringify(combinedClaimData, null, 2)}
 Policy Data: ${JSON.stringify(combinedPolicyData, null, 2)}
+
+=== LEARNED CLAIM NUMBER PATTERNS ===
+${claimNumberHint}
 
 === YOUR TASK - TWO PHASE ANALYSIS ===
 

@@ -1638,3 +1638,57 @@ Accuracy Tracking Per Field:
 - recentAccuracy: Last 10 predictions accuracy
 - trendDirection: improving/declining/stable
 - readyForAutoClaim: Boolean if 90%+ accuracy with 10+ samples
+
+
+---
+Task ID: 54
+Agent: Main Agent
+Task: Implement Claim Number Pattern Learning System
+
+Work Log:
+- User requested: AI should auto-guess claim numbers and learn patterns from user corrections
+- Created comprehensive claim-number-patterns.ts library with:
+  - detectClaimNumberPattern(): Detects prefix, separator, year position, format
+  - learnClaimNumberPattern(): Stores patterns per insurance company
+  - getClaimNumberPatterns(): Retrieves learned patterns
+  - extractClaimNumberWithPatterns(): Extracts using learned patterns
+  - validateClaimNumber(): Validates and auto-adjusts claim numbers
+  - learnFromClaimNumberCorrection(): Learns from user corrections
+  - getClaimNumberFormatHint(): Returns hint for AI prompts
+- Updated unified analysis to include learned pattern hints in AI prompts
+- Updated claims API to learn patterns and learn from corrections
+- Removed duplicate claim number format functions from claims API
+
+Stage Summary:
+- AI can now recognize and apply claim number patterns
+- System learns from every claim number processed
+- Corrections improve future pattern matching
+- Patterns stored per insurance company for accurate matching
+
+Files Created:
+- src/lib/claim-number-patterns.ts - Complete pattern learning system
+
+Files Modified:
+- src/lib/attachment-ai-analyzer.ts - Added pattern hints to AI prompt
+- src/app/api/claims/route.ts - Integrated pattern learning
+
+Supported Claim Number Formats:
+1. STM-2024-12345 (PREFIX-YYYY-NNNNN)
+2. OUT/123456/24 (PREFIX/NNNNNN/YY)
+3. HOL-12345678 (PREFIX-NNNNNNNN)
+4. DIS12345678 (PREFIXNNNNNNNN)
+5. And more...
+
+Pattern Learning Flow:
+1. AI extracts claim number from document
+2. Pattern detected and stored with company
+3. Confidence increases with each match
+4. When user corrects, system learns the difference
+5. Future extractions use learned patterns
+
+Auto-Adjustment Features:
+- Fix missing separators
+- Fix wrong separators
+- Add missing prefix
+- Fix OCR errors (O -> 0)
+- Pad missing leading zeros

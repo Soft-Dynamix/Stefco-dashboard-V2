@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { learnExtractionPattern, ExtractableField } from "@/lib/extraction-patterns";
 import { comparePredictionsVsActual, checkAutoClaimReadiness } from "@/lib/prediction-learning";
+import { learnClaimNumberPattern, learnFromClaimNumberCorrection } from "@/lib/claim-number-patterns";
 
 export async function GET(request: NextRequest) {
   try {
@@ -131,10 +132,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Learn claim number format
+    // Learn claim number format using the new pattern learning system
     if (body.claimNumber && body.insuranceCompanyId) {
-      await learnClaimNumberFormat(body.insuranceCompanyId, body.claimNumber)
-        .catch(err => console.error("Failed to learn claim number format:", err));
+      await learnClaimNumberPattern(body.insuranceCompanyId, body.claimNumber)
+        .catch(err => console.error("Failed to learn claim number pattern:", err));
+    }
+
+    // Learn from claim number correction if AI predicted differently
+    if (body.claimNumber && body.insuranceCompanyId && body.originalClaimNumber && body.originalClaimNumber !== body.claimNumber) {
+      await learnFromClaimNumberCorrection(body.insuranceCompanyId, body.originalClaimNumber, body.claimNumber)
+        .catch(err => console.error("Failed to learn from claim number correction:", err));
+      console.log(`[claims] Learned from claim number correction: ${body.originalClaimNumber} -> ${body.claimNumber}`);
     }
 
     // Update sender pattern stats if we know the domain
@@ -193,124 +201,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Learn claim number format pattern
-async function learnClaimNumberFormat(
-  insuranceCompanyId: string, 
-  claimNumber: string
-): Promise<void> {
-  try {
-    // Parse the claim number to extract format components
-    const formatInfo = parseClaimNumberFormat(claimNumber);
-    
-    if (!formatInfo) return;
-
-    // Check if this format already exists
-    const existing = await db.claimNumberFormat.findFirst({
-      where: {
-        insuranceCompanyId,
-        formatPattern: formatInfo.formatPattern,
-      },
-    });
-
-    if (existing) {
-      // Increment match count
-      await db.claimNumberFormat.update({
-        where: { id: existing.id },
-        data: {
-          matchCount: { increment: 1 },
-          confidence: Math.min(95, existing.confidence + 2),
-        },
-      });
-    } else {
-      // Create new format pattern
-      await db.claimNumberFormat.create({
-        data: {
-          insuranceCompanyId,
-          formatPattern: formatInfo.formatPattern,
-          prefix: formatInfo.prefix,
-          separator: formatInfo.separator,
-          hasYear: formatInfo.hasYear,
-          yearPosition: formatInfo.yearPosition,
-          numberLength: formatInfo.numberLength,
-          regexPattern: formatInfo.regexPattern,
-          example: claimNumber,
-          confidence: 70,
-        },
-      });
-    }
-  } catch (error) {
-    console.error("Failed to learn claim number format:", error);
-  }
-}
-
-// Parse claim number to extract format
-function parseClaimNumberFormat(claimNumber: string): {
-  formatPattern: string;
-  prefix: string | null;
-  separator: string | null;
-  hasYear: boolean;
-  yearPosition: number | null;
-  numberLength: number | null;
-  regexPattern: string;
-} | null {
-  if (!claimNumber || claimNumber.length < 5) return null;
-
-  const patterns = [
-    // Company-Year-Number: STM-2024-12345
-    { regex: /^([A-Z]{2,4})[-/](\d{4})[-/](\d{4,8})$/, format: "AAA-YYYY-NNNNN", sep: "-" },
-    // Company/Number/ShortYear: OUT/123456/24
-    { regex: /^([A-Z]{2,4})[-/](\d{5,8})[-/](\d{2})$/, format: "AAA/NNNNNN/YY", sep: "/" },
-    // Company-Number: HOL-12345678
-    { regex: /^([A-Z]{2,4})[-/](\d{5,10})$/, format: "AAA-NNNNNNNN", sep: "-" },
-    // Company+Number: CLM123456
-    { regex: /^([A-Z]{2,4})(\d{5,10})$/, format: "AAANNNNNN", sep: "" },
-  ];
-
-  for (const pattern of patterns) {
-    const match = claimNumber.match(pattern.regex);
-    if (match) {
-      const prefix = match[1];
-      const hasYear = /\d{4}/.test(match[2]) || /\d{2}$/.test(claimNumber);
-      const yearPosition = hasYear ? (pattern.format.includes("YYYY") ? 2 : 3) : null;
-      
-      let regexPattern: string;
-      if (match[0].includes("/") || match[0].includes("-")) {
-        const sep = match[0].includes("/") ? "/" : "-";
-        const parts = claimNumber.split(sep);
-        regexPattern = `^${prefix}${sep}(\\d{${parts[1]?.length || 4}})${parts[2] ? sep + '(\\d{' + parts[2].length + '})' : ''}$`;
-      } else {
-        regexPattern = `^${prefix}(\\d{5,10})$`;
-      }
-
-      return {
-        formatPattern: pattern.format.replace("AAA", prefix),
-        prefix,
-        separator: pattern.sep,
-        hasYear,
-        yearPosition,
-        numberLength: match[2]?.length || match[3]?.length || null,
-        regexPattern,
-      };
-    }
-  }
-
-  // Fallback
-  const prefixMatch = claimNumber.match(/^([A-Z]{2,4})/);
-  if (prefixMatch) {
-    return {
-      formatPattern: `${prefixMatch[1]}-XXXXX`,
-      prefix: prefixMatch[1],
-      separator: claimNumber.includes("/") ? "/" : claimNumber.includes("-") ? "-" : "",
-      hasYear: /\d{4}/.test(claimNumber),
-      yearPosition: null,
-      numberLength: null,
-      regexPattern: `^${prefixMatch[1]}[-/]?(\\d{4,10})$`,
-    };
-  }
-
-  return null;
 }
 
 // Update sender pattern when a claim is created
