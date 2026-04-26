@@ -262,3 +262,29 @@ Stage Summary:
 - Dev server running correctly
 
 ---
+Task ID: 10
+Agent: Main Agent
+Task: Fix refetch attachments badge staying at 3
+
+Work Log:
+- **Bug Identified**: `processed` variable used but never defined in `refetchEmailsWithAttachments`
+  - Line 405: `if (processed >= limit) break;` - `processed` was undefined
+  - This caused ReferenceError when the function tried to check the limit
+  - The refetch was failing silently, so the badge count never updated
+- **Fix 1**: Added `let processed = 0;` declaration (line 360)
+- **Fix 2**: Added `processed++;` increment when matching email is found (line 425)
+- **Fix 3**: Added marking emails as "NO_ATTACHMENTS" for single email refetch
+  - When a specific email is refetched and has no attachments, it now gets marked
+  - This prevents the email from showing up in the "needs refetch" count again
+  - Code added in `/api/refetch-attachments/route.ts` lines 142-148
+
+Stage Summary:
+- Badge count now correctly updates after refetching attachments
+- The `processed` counter properly tracks how many emails were checked
+- Emails without attachments are marked as "NO_ATTACHMENTS" to prevent re-processing
+- All three fixes work together:
+  1. Counter increments properly
+  2. Database updates with "NO_ATTACHMENTS" marker
+  3. Stats API returns correct count of emails still needing refetch
+- Lint check passes (1 pre-existing warning about image alt prop)
+- Dev server running correctly

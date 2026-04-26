@@ -357,6 +357,7 @@ export async function refetchEmailsWithAttachments(limit: number = 50): Promise<
 
   const errors: string[] = [];
   let updated = 0;
+  let processed = 0;
 
   try {
     // Find emails that have no attachment metadata OR need attachment content
@@ -419,8 +420,9 @@ export async function refetchEmailsWithAttachments(limit: number = 50): Promise<
 
         if (!matchingEmail) continue;
 
-        // Mark this email as matched
+        // Mark this email as matched and count as processed
         matchedEmailIds.add(matchingEmail.id);
+        processed++;
 
         // Extract attachments from this message
         const attachments = extractAttachmentsFromSource(source);

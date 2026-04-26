@@ -139,6 +139,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Mark email as checked even if no attachments found (prevents re-processing)
+      if (result.success && result.attachments.length === 0) {
+        await db.emailQueue.update({
+          where: { id: email.id },
+          data: { attachments: "NO_ATTACHMENTS" },
+        });
+      }
+
       return NextResponse.json({
         success: result.success,
         message: result.error || "No attachments found",
