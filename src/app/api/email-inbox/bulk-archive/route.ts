@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update all selected emails
-    const result = await db.emailInbox.updateMany({
+    const result = await db.emailQueue.updateMany({
       where: {
         id: { in: emailIds },
       },

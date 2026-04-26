@@ -873,3 +873,28 @@ Benefits:
 - Reduces repetitive individual archive actions
 
 ---
+
+---
+Task ID: 42
+Agent: Main Agent
+Task: Fix Bulk Archive API Error
+
+Work Log:
+- User reported "failed to update emails" error when using bulk archive
+- Investigated the bulk archive API endpoint
+- Found the issue: API was using `db.emailInbox` but the Prisma model is `EmailQueue`
+- Fixed the model reference to use `db.emailQueue.updateMany()`
+- Tested the API - now returning successful response
+
+Stage Summary:
+- Bulk archive API now works correctly
+- Model reference fixed from `emailInbox` to `emailQueue`
+- API returns proper success response with count of updated emails
+
+Files Modified:
+- src/app/api/email-inbox/bulk-archive/route.ts - Fixed Prisma model reference
+
+Root Cause:
+The API was using the wrong Prisma model name. The email table is defined as `EmailQueue` in the Prisma schema, but the bulk archive API was trying to use `emailInbox` which doesn't exist.
+
+---
