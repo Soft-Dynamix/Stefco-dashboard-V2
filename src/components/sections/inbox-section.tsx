@@ -58,6 +58,8 @@ import {
   Archive,
   ArchiveRestore,
   X,
+  Image,
+  Code,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
@@ -69,6 +71,7 @@ interface Email {
   from: string | null;
   fromDomain: string | null;
   bodyText: string | null;
+  bodyHtml: string | null;
   aiClassification: string | null;
   aiConfidence: number | null;
   aiReasoning: string | null;
@@ -113,6 +116,7 @@ export function InboxSection() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+  const [showHtmlView, setShowHtmlView] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -1036,21 +1040,54 @@ export function InboxSection() {
                     {/* Email Body Card */}
                     <Card className="border">
                       <CardHeader className="py-3 px-4 bg-muted/30 border-b">
-                        <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Email Body
-                        </CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            Email Body
+                          </CardTitle>
+                          {selectedEmail.bodyHtml && (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant={showHtmlView ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setShowHtmlView(true)}
+                                className="h-7 text-xs gap-1"
+                              >
+                                <Image className="h-3.5 w-3.5" />
+                                HTML
+                              </Button>
+                              <Button
+                                variant={!showHtmlView ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setShowHtmlView(false)}
+                                className="h-7 text-xs gap-1"
+                              >
+                                <Code className="h-3.5 w-3.5" />
+                                Text
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(92vh-240px)] min-h-[400px]">
-                          <div className="p-5">
-                            <pre className="text-base whitespace-pre-wrap font-sans leading-7 tracking-wide">
-                              {selectedEmail.bodyText || (
-                                <span className="text-muted-foreground italic">No content available</span>
-                              )}
-                            </pre>
-                          </div>
-                        </ScrollArea>
+                        {showHtmlView && selectedEmail.bodyHtml ? (
+                          <iframe
+                            srcDoc={selectedEmail.bodyHtml}
+                            className="w-full h-[calc(92vh-260px)] min-h-[400px] border-0"
+                            sandbox="allow-same-origin allow-images"
+                            title="Email HTML Content"
+                          />
+                        ) : (
+                          <ScrollArea className="h-[calc(92vh-240px)] min-h-[400px]">
+                            <div className="p-5">
+                              <pre className="text-base whitespace-pre-wrap font-sans leading-7 tracking-wide">
+                                {selectedEmail.bodyText || (
+                                  <span className="text-muted-foreground italic">No content available</span>
+                                )}
+                              </pre>
+                            </div>
+                          </ScrollArea>
+                        )}
                       </CardContent>
                     </Card>
                     
