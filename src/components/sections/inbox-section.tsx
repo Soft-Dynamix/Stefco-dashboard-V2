@@ -68,6 +68,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
+import { PDFViewer } from "@/components/pdf-viewer";
 
 interface Email {
   id: string;
@@ -1978,24 +1979,20 @@ export function InboxSection() {
               {previewAttachment?.contentType}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto p-4 min-h-[400px] max-h-[calc(90vh-120px)]">
+          <div className="flex-1 overflow-hidden min-h-[400px] max-h-[calc(90vh-120px)]">
             {previewAttachment && (
               previewAttachment.contentType.startsWith('image/') ? (
-                <img
-                  src={previewAttachment.content}
-                  alt={previewAttachment.filename}
-                  className="max-w-full max-h-full mx-auto object-contain"
-                />
-              ) : previewAttachment.contentType.includes('pdf') ? (
-                <div className="w-full h-[70vh] flex flex-col">
-                  <iframe
+                <div className="overflow-auto p-4 h-full">
+                  <img
                     src={previewAttachment.content}
-                    className="flex-1 border-0 rounded"
-                    title="PDF Preview"
+                    alt={previewAttachment.filename}
+                    className="max-w-full max-h-full mx-auto object-contain"
                   />
                 </div>
+              ) : previewAttachment.contentType.includes('pdf') ? (
+                <PDFViewer file={previewAttachment.content} />
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
                   <FileText className="h-16 w-16 mb-4 opacity-50" />
                   <p>Preview not available for this file type</p>
                   <Button
