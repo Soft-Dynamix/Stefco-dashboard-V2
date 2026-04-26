@@ -971,7 +971,7 @@ export function InboxSection() {
 
       {/* Email Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-[98vw] w-[98vw] h-[96vh] p-0 gap-0 flex flex-col">
+        <DialogContent className="max-w-[100vw] w-[100vw] h-[96vh] p-0 gap-0 flex flex-col rounded-none border-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
@@ -990,7 +990,7 @@ export function InboxSection() {
             <div className="flex flex-col flex-1 overflow-hidden min-h-0">
               {/* Email Header Info */}
               <div className="px-6 py-3 border-b bg-muted/10 flex-shrink-0">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">From</div>
                     <div className="font-medium text-sm flex items-center gap-2">
@@ -1055,7 +1055,7 @@ export function InboxSection() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(96vh-400px)] min-h-[300px]">
+                        <ScrollArea className="h-[calc(96vh-350px)] min-h-[400px]">
                           <div className="p-4">
                             <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
                               {selectedEmail.bodyText || (
@@ -1100,77 +1100,82 @@ export function InboxSection() {
                   </TabsContent>
                   
                   <TabsContent value="ai" className="mt-2 space-y-3" forceMount>
-                    {/* Classification Card */}
-                    <Card className="border">
-                      <CardHeader className="py-3 px-4 bg-muted/30 border-b">
-                        <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <Brain className="h-4 w-4" />
-                          AI Classification
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="space-y-1">
-                            <div className="text-xs text-muted-foreground uppercase tracking-wide">Classification</div>
-                            <div className="mt-1">
-                              {selectedEmail.aiClassification 
-                                ? getClassificationBadge(selectedEmail.aiClassification)
-                                : <Badge variant="outline">Not analyzed</Badge>}
+                    {/* AI Analysis - Two Column Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* Left Column - Classification & Reasoning */}
+                      <div className="space-y-3">
+                        {/* Classification Card */}
+                        <Card className="border">
+                          <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                              <Brain className="h-4 w-4" />
+                              AI Classification
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="py-4">
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="space-y-1">
+                                <div className="text-xs text-muted-foreground uppercase tracking-wide">Classification</div>
+                                <div className="mt-1">
+                                  {selectedEmail.aiClassification 
+                                    ? getClassificationBadge(selectedEmail.aiClassification)
+                                    : <Badge variant="outline">Not analyzed</Badge>}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="text-xs text-muted-foreground uppercase tracking-wide">Confidence</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {selectedEmail.aiConfidence !== null ? (
+                                    <>
+                                      <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full rounded-full ${
+                                            selectedEmail.aiConfidence >= 80 ? 'bg-green-500' :
+                                            selectedEmail.aiConfidence >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                                          }`}
+                                          style={{ width: `${selectedEmail.aiConfidence}%` }}
+                                        />
+                                      </div>
+                                      <span className="font-medium text-sm">{selectedEmail.aiConfidence.toFixed(1)}%</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-xs text-muted-foreground uppercase tracking-wide">Confidence</div>
-                            <div className="flex items-center gap-2 mt-1">
-                              {selectedEmail.aiConfidence !== null ? (
-                                <>
-                                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full ${
-                                        selectedEmail.aiConfidence >= 80 ? 'bg-green-500' :
-                                        selectedEmail.aiConfidence >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                                      }`}
-                                      style={{ width: `${selectedEmail.aiConfidence}%` }}
-                                    />
-                                  </div>
-                                  <span className="font-medium text-sm">{selectedEmail.aiConfidence.toFixed(1)}%</span>
-                                </>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">-</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    {/* AI Reasoning Card */}
-                    <Card className="border">
-                      <CardHeader className="py-3 px-4 bg-muted/30 border-b">
-                        <CardTitle className="text-sm font-medium">AI Reasoning</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(96vh-550px)] min-h-[150px]">
-                          <div className="p-4">
-                            <p className="text-sm leading-relaxed">
-                              {selectedEmail.aiReasoning || (
-                                <span className="text-muted-foreground italic">No reasoning available</span>
-                              )}
-                            </p>
-                          </div>
-                        </ScrollArea>
-                      </CardContent>
-                    </Card>
-                    
-                    {/* Extracted Data Card */}
-                    <Card className="border">
-                      <CardHeader className="py-3 px-4 bg-muted/30 border-b">
-                        <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Extracted Data
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <ScrollArea className="h-[calc(96vh-500px)] min-h-[200px]">
+                          </CardContent>
+                        </Card>
+                        
+                        {/* AI Reasoning Card */}
+                        <Card className="border">
+                          <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                            <CardTitle className="text-sm font-medium">AI Reasoning</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            <ScrollArea className="h-[calc(96vh-500px)] min-h-[200px]">
+                              <div className="p-4">
+                                <p className="text-sm leading-relaxed">
+                                  {selectedEmail.aiReasoning || (
+                                    <span className="text-muted-foreground italic">No reasoning available</span>
+                                  )}
+                                </p>
+                              </div>
+                            </ScrollArea>
+                          </CardContent>
+                        </Card>
+                      </div>
+                      
+                      {/* Right Column - Extracted Data */}
+                      <Card className="border">
+                        <CardHeader className="py-3 px-4 bg-muted/30 border-b">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            Extracted Data
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <ScrollArea className="h-[calc(96vh-400px)] min-h-[350px]">
                           <div className="p-4">
                             {selectedEmail.aiExtractedData ? (
                               <pre className="text-sm font-mono bg-muted/50 p-3 rounded-md">
@@ -1183,6 +1188,7 @@ export function InboxSection() {
                         </ScrollArea>
                       </CardContent>
                     </Card>
+                    </div>
                   </TabsContent>
                   
                   <TabsContent value="actions" className="mt-2 space-y-3" forceMount>
