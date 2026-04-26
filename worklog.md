@@ -99,3 +99,35 @@ Stage Summary:
 - Dev server running correctly
 
 ---
+Task ID: 4
+Agent: Main Agent
+Task: Make VIN extraction more flexible to handle various formats
+
+Work Log:
+- Updated `findAllPossibleVins()` in `extraction-patterns.ts`:
+  - Added helper function `cleanAndValidateVin()` to clean and validate VINs
+  - VINs can now have spaces, dashes, underscores, or dots as separators
+  - Pattern captures 16-25 characters to allow for separators, then cleans to 17
+  - Added patterns for VINs with spaces (e.g., "AHT 286 CZ0 J1234567")
+  - Added patterns for VINs with dashes (e.g., "AHT-286-CZ0-J1234567")
+- Updated `extractVinNumbers()` in `attachment-intelligence.ts`:
+  - Same flexible format handling
+  - Cleans and validates before returning
+- Updated `fallbackExtraction()` in `extraction-patterns.ts`:
+  - Flexible pattern matching for VINs
+  - Cleans separators from extracted values
+  - Falls back to `findAllPossibleVins()` for comprehensive search
+
+Stage Summary:
+- VIN extraction now handles ANY format:
+  - Continuous: "AHT286CZ0J1234567"
+  - With spaces: "AHT 286 CZ0 J1234567"
+  - With dashes: "AHT-286-CZ0-J1234567"
+  - With underscores: "AHT_286_CZ0_J1234567"
+  - Mixed: "AHT 286-CZ0_J1234567"
+- All VINs are cleaned to standard 17-character format before storage
+- Validation ensures: exactly 17 chars, no I/O/Q, must have both letters and numbers
+- Lint check passes (only 1 minor warning unrelated to changes)
+- Dev server running correctly
+
+---

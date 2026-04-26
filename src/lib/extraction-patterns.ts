@@ -22,57 +22,75 @@ export type ExtractableField =
 
 /**
  * Aggressively scan text for any VIN/Chassis number patterns
- * This function finds ALL potential VINs in text, even without labels
- * VIN format: 17 alphanumeric characters, excluding I, O, Q
+ * VIN is 17 alphanumeric characters (no I, O, Q), but may have spaces/dashes
+ * This function is flexible - it handles VINs in any format
  */
 export function findAllPossibleVins(text: string): string[] {
   const vins: string[] = [];
   const seen = new Set<string>();
   
-  // Pattern 1: With common labels (highest priority)
+  // Helper to clean and validate a VIN
+  const cleanAndValidateVin = (rawVin: string): string | null => {
+    // Remove spaces, dashes, and common separators
+    const cleaned = rawVin.replace(/[\s\-._]/g, '').toUpperCase();
+    // VIN must be exactly 17 alphanumeric chars (no I, O, Q)
+    if (cleaned.length !== 17) return null;
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(cleaned)) return null;
+    // Must have both letters and numbers to be valid
+    const hasLetters = /[A-HJ-NPR-Z]/.test(cleaned);
+    const hasNumbers = /[0-9]/.test(cleaned);
+    if (!hasLetters || !hasNumbers) return null;
+    return cleaned;
+  };
+  
+  // Pattern 1: Look for any labeled VIN/Chassis values
+  // The label might be followed by various formats (with spaces, dashes, etc.)
   const labeledPatterns = [
-    // Standard VIN labels
-    /(?:VIN|Vin|vin)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi,
-    // Chassis labels (commonly used in South Africa)
-    /(?:CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi,
-    // Vehicle ID labels
-    /(?:Vehicle\s*ID|VehicleID|V\.?I\.?N\.?)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi,
+    // VIN with various labels and formats
+    /(?:VIN|Vin|vin|V\.?I\.?N\.?)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
+    // Chassis with various labels (common in SA)
+    /(?:CHASSIS|Chassis|chassis|Chassis\s*No|Chassis\s*Number)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
+    // Vehicle ID
+    /(?:Vehicle\s*ID|VehicleID|Vehicle\s*Identification)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
     // Afrikaans labels
-    /(?:Kasnommer|Onderstel)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9]{17})/gi,
-    // Short labels
-    /(?:VIN:|Chassis:|Chassis\s*No:)\s*([A-HJ-NPR-Z0-9]{17})/gi,
-    // In tables with various formats
-    /(?:VIN|Chassis)\s*[:\s]+\s*([A-HJ-NPR-Z0-9]{17})/gi,
+    /(?:Kasnommer|Onderstel|Voertuignommer)\s*(?:No|Number|#|Nr\.?|:)?\s*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
+    // Short form labels
+    /(?:VIN:|Chassis:|Chassis\s*No:)\s*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
   ];
   
   for (const pattern of labeledPatterns) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
       if (match[1]) {
-        const vin = match[1].toUpperCase();
-        if (!seen.has(vin)) {
-          seen.add(vin);
-          vins.push(vin);
+        const cleaned = cleanAndValidateVin(match[1]);
+        if (cleaned && !seen.has(cleaned)) {
+          seen.add(cleaned);
+          vins.push(cleaned);
         }
       }
     }
   }
   
-  // Pattern 2: Standalone 17-char alphanumeric sequences (lower priority)
-  // Only add if not already found
-  const standalonePattern = /\b([A-HJ-NPR-Z0-9]{17})\b/g;
-  let match;
-  while ((match = standalonePattern.exec(text)) !== null) {
-    if (match[1]) {
-      const vin = match[1].toUpperCase();
-      if (!seen.has(vin)) {
-        // Validate it looks like a real VIN (not just random 17 chars)
-        // VINs typically have a mix of letters and numbers
-        const hasLetters = /[A-HJ-NPR-Z]/.test(vin);
-        const hasNumbers = /[0-9]/.test(vin);
-        if (hasLetters && hasNumbers) {
-          seen.add(vin);
-          vins.push(vin);
+  // Pattern 2: Find any 17-char sequences that look like VINs
+  // This catches VINs without labels
+  // Look for sequences with possible separators
+  const standalonePatterns = [
+    // Continuous 17-char alphanumeric
+    /\b([A-HJ-NPR-Z0-9]{17})\b/g,
+    // With spaces (e.g., "AHT 286 CZ0 J1234567" or "AHT286CZ0J1234567")
+    /\b([A-HJ-NPR-Z0-9]{1,4}[\s\-][A-HJ-NPR-Z0-9]{1,4}[\s\-]?[A-HJ-NPR-Z0-9]{1,4}[\s\-]?[A-HJ-NPR-Z0-9]{1,4})\b/g,
+    // With dashes (e.g., "AHT-286-CZ0-J1234567")
+    /\b([A-HJ-NPR-Z0-9]{1,5}-[A-HJ-NPR-Z0-9]{1,5}-[A-HJ-NPR-Z0-9]{1,5}-?[A-HJ-NPR-Z0-9]{0,5})\b/g,
+  ];
+  
+  for (const pattern of standalonePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match[1]) {
+        const cleaned = cleanAndValidateVin(match[1]);
+        if (cleaned && !seen.has(cleaned)) {
+          seen.add(cleaned);
+          vins.push(cleaned);
         }
       }
     }
@@ -528,9 +546,9 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
       description: "SA vehicle registration pattern",
     },
     vehicleVinNumber: {
-      // Try multiple VIN patterns - first with label, then standalone
-      pattern: /(?:vin|chassis)\s*(?:no|number|#|nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
-      description: "VIN/Chassis number pattern (17 alphanumeric characters)",
+      // Try multiple VIN patterns - flexible format with spaces/dashes
+      pattern: /(?:vin|chassis)\s*(?:no|number|#|nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/i,
+      description: "VIN/Chassis number pattern (17 alphanumeric characters, flexible format)",
     },
     excessAmount: {
       pattern: /excess[:\s]*(R?\s*[\d,]+\.?\d{0,2})/i,
@@ -542,47 +560,73 @@ function fallbackExtraction(text: string, fieldType: ExtractableField): Extracti
   if (fallback) {
     const match = text.match(fallback.pattern);
     if (match && match[1]) {
-      return {
-        field: fieldType,
-        value: match[1].trim(),
-        confidence: 50,
-        pattern: fallback.pattern.source,
-        source: "fallback",
-      };
+      // For VIN, clean the value (remove spaces/dashes)
+      let value = match[1].trim();
+      if (fieldType === "vehicleVinNumber") {
+        value = value.replace(/[\s\-._]/g, '').toUpperCase();
+        // Validate it's 17 chars
+        if (value.length !== 17 || !/^[A-HJ-NPR-Z0-9]{17}$/.test(value)) {
+          value = ""; // Invalid, try other patterns
+        }
+      }
+      if (value) {
+        return {
+          field: fieldType,
+          value,
+          confidence: 50,
+          pattern: fallback.pattern.source,
+          source: "fallback",
+        };
+      }
     }
     
     // For VIN, try alternative patterns if labeled pattern didn't match
     if (fieldType === "vehicleVinNumber") {
-      // Try to find any standalone 17-character VIN-like sequence
+      // Helper to clean and validate VIN
+      const cleanVin = (raw: string): string | null => {
+        const cleaned = raw.replace(/[\s\-._]/g, '').toUpperCase();
+        if (cleaned.length !== 17) return null;
+        if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(cleaned)) return null;
+        if (!/[A-HJ-NPR-Z]/.test(cleaned) || !/[0-9]/.test(cleaned)) return null;
+        return cleaned;
+      };
+      
+      // Try various VIN patterns
       const vinPatterns = [
-        // Pattern with various labels
-        /(?:VIN|Vin|vin|CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/i,
-        // Standalone VIN in text (must be word-bounded)
+        // Pattern with various labels (flexible format)
+        /(?:VIN|Vin|vin|CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?|#)?[:\s]*([A-HJ-NPR-Z0-9][\s\-_A-HJ-NPR-Z0-9]{16,25})/gi,
+        // Standalone VIN in text (continuous)
         /\b([A-HJ-NPR-Z0-9]{17})\b/g,
+        // With spaces (e.g., "AHT 286 CZ0 J1234567")
+        /\b([A-HJ-NPR-Z0-9]{1,4}[\s\-][A-HJ-NPR-Z0-9]{1,4}[\s\-]?[A-HJ-NPR-Z0-9]{1,4}[\s\-]?[A-HJ-NPR-Z0-9]{1,4})\b/g,
+        // With dashes
+        /\b([A-HJ-NPR-Z0-9]{1,5}-[A-HJ-NPR-Z0-9]{1,5}-[A-HJ-NPR-Z0-9]{1,5}-?[A-HJ-NPR-Z0-9]{0,5})\b/g,
       ];
       
       for (const vPattern of vinPatterns) {
         const vMatch = text.match(vPattern);
         if (vMatch && vMatch[1]) {
-          return {
-            field: fieldType,
-            value: vMatch[1].trim().toUpperCase(),
-            confidence: 40, // Slightly lower confidence for unlabeled VINs
-            pattern: vPattern.source,
-            source: "fallback_alt",
-          };
+          const cleaned = cleanVin(vMatch[1]);
+          if (cleaned) {
+            return {
+              field: fieldType,
+              value: cleaned,
+              confidence: 40,
+              pattern: vPattern.source,
+              source: "fallback_alt",
+            };
+          }
         }
       }
       
-      // Last resort: find ALL 17-char alphanumeric sequences and return the most likely VIN
-      const allPossibleVins = text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/g);
-      if (allPossibleVins && allPossibleVins.length > 0) {
-        // Return the first one found
+      // Last resort: use findAllPossibleVins function for comprehensive search
+      const allVins = findAllPossibleVins(text);
+      if (allVins.length > 0) {
         return {
           field: fieldType,
-          value: allPossibleVins[0].toUpperCase(),
+          value: allVins[0],
           confidence: 30,
-          pattern: "\\b[A-HJ-NPR-Z0-9]{17}\\b",
+          pattern: "findAllPossibleVins",
           source: "fallback_aggressive",
         };
       }
