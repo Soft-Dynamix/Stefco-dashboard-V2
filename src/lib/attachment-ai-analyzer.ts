@@ -17,7 +17,7 @@
 
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "./db";
-import pdf from "pdf-parse";
+// pdf-parse v2.4.5 - using dynamic import to avoid ESM cache issues
 import { getClaimNumberFormatHint, getClaimNumberPatternsByDomain, validateClaimNumber } from "./claim-number-patterns";
 import { findAllPossibleVins, extractVehicleDetails } from "./extraction-patterns";
 
@@ -1102,7 +1102,10 @@ async function analyzePdfWithLlm(
   try {
     if (base64Content) {
       const pdfBuffer = Buffer.from(base64Content, 'base64');
-      const pdfData = await pdf(pdfBuffer);
+      // Dynamic import to avoid ESM caching issues with pdf-parse v2.4.5
+      const pdfParse = await import("pdf-parse");
+      const parser = new pdfParse.PDFParse({ data: pdfBuffer });
+      const pdfData = await parser.getText();
       pdfText = pdfData.text || "";
       console.log(`[analyzePdfWithLlm] Extracted ${pdfText.length} chars of text from PDF`);
     }

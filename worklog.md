@@ -216,3 +216,28 @@ Stage Summary:
 - Dev server running correctly
 
 ---
+Task ID: 8
+Agent: Main Agent
+Task: Fix PDF parsing import error and DOMMatrix SSR error
+
+Work Log:
+- **Error 1**: `Export default doesn't exist in target module` for pdf-parse
+  - The new pdf-parse v2.4.5 exports `PDFParse` as a named export, not default
+  - Fixed by using dynamic import: `await import("pdf-parse")`
+  - Correctly instantiate: `new pdfParse.PDFParse({ data: buffer })`
+  - Call `.getText()` method to extract text
+- **Error 2**: `ReferenceError: DOMMatrix is not defined` 
+  - Caused by react-pdf component being server-side rendered
+  - Fixed by using Next.js dynamic import with `ssr: false` for PDFViewer
+  - `const PDFViewer = dynamic(() => import(...).then(mod => mod.PDFViewer), { ssr: false })`
+- Turbopack cache issues required server restart to pick up changes
+
+Stage Summary:
+- PDF text extraction now works correctly in backend
+- PDF viewer component now loads correctly on client side only
+- Both fixes work together to enable full document analysis
+- User can now delete and repoll emails to get fresh analysis
+- Lint check passes (1 pre-existing warning)
+- Dev server running correctly - GET / returns 200
+
+---

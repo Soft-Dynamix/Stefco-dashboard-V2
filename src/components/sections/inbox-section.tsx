@@ -68,7 +68,13 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackModal, RejectionFeedbackData } from "@/components/feedback-modal";
-import { PDFViewer } from "@/components/pdf-viewer";
+import dynamic from "next/dynamic";
+
+// Dynamically import PDFViewer with SSR disabled to avoid DOMMatrix errors
+const PDFViewer = dynamic(
+  () => import("@/components/pdf-viewer").then((mod) => mod.PDFViewer),
+  { ssr: false }
+);
 
 interface Email {
   id: string;
