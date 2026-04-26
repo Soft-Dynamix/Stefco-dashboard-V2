@@ -443,8 +443,8 @@ export async function fetchEmails(limit: number = 50): Promise<{
             from: emailData.from,
             fromDomain: emailData.fromDomain,
             to: emailData.to,
-            bodyText: emailData.bodyText?.substring(0, 50000),
-            bodyHtml: emailData.bodyHtml?.substring(0, 100000),
+            bodyText: emailData.bodyText, // Full text - no truncation needed
+            bodyHtml: emailData.bodyHtml, // Full HTML - no truncation needed
             attachments: emailData.attachments.length > 0 ? JSON.stringify(emailData.attachments) : null,
             emailDate: emailData.date,
             status: autoIgnored ? "IGNORED" : "PENDING",

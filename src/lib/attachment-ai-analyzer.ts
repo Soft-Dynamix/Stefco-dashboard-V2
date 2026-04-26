@@ -942,7 +942,7 @@ export async function analyzeAttachment(
       containsClaimNumber,
       containsPolicyNumber,
       containsVehicleReg,
-      rawExtractedText: rawExtractedText.slice(0, 50000),
+      rawExtractedText: rawExtractedText, // Full text - no truncation needed (SQLite can handle large strings)
       claimFormData: claimFormData ? JSON.stringify(claimFormData) : null,
       policyScheduleData: policyScheduleData ? JSON.stringify(policyScheduleData) : null,
       processingTimeMs,
@@ -1957,10 +1957,11 @@ export async function performUnifiedAnalysis(
   }
   
   // Step 2: Gather all extracted text from attachments
+  // NO TRUNCATION - We need ALL text to find vehicle details, VINs, claim numbers etc.
   const attachmentTexts = attachmentResults.map(r => ({
     fileName: r.fileName,
     documentType: r.classification.documentType,
-    text: r.rawExtractedText.slice(0, 2000), // Limit per attachment
+    text: r.rawExtractedText, // Full text - no truncation
     claimData: r.claimFormData,
     policyData: r.policyScheduleData
   }));
@@ -2006,7 +2007,7 @@ Analyze ALL available information from this email and its attachments to produce
 Subject: ${emailData.subject || '(No Subject)'}
 From: ${emailData.from || 'Unknown'}
 Body:
-${(emailData.bodyText || '').substring(0, 4000)}
+${emailData.bodyText || '(No body text)'}
 
 === ATTACHMENTS (${attachments.length} files) ===
 ${attachmentSummary || '(No attachments)'}

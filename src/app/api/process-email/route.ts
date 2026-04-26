@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     const classificationPrompt = CLASSIFICATION_PROMPT
       .replace("{subject}", subject || "(No Subject)")
       .replace("{from}", from || "Unknown")
-      .replace("{body}", bodyText.substring(0, 4000));
+      .replace("{body}", bodyText || "(No body text)"); // No truncation
 
     const classificationResponse = await zai.chat.completions.create({
       messages: [{ role: "user", content: classificationPrompt }],
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       const extractionPrompt = EXTRACTION_PROMPT
         .replace("{subject}", subject || "(No Subject)")
         .replace("{from}", from || "Unknown")
-        .replace("{body}", bodyText.substring(0, 4000))
+        .replace("{body}", bodyText || "(No body text)") // No truncation
         .replace("{hints}", hintsText);
 
       const extractionResponse = await zai.chat.completions.create({

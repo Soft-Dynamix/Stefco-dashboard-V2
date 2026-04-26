@@ -51,6 +51,14 @@ export interface AttachmentExtractionResult {
   clientNames: AttachmentCandidate[];
   policyNumbers: AttachmentCandidate[];
   vehicleRegs: AttachmentCandidate[];
+  vinNumbers: AttachmentCandidate[]; // VIN/Chassis numbers
+  vehicleDetails: {
+    make: string | null;
+    model: string | null;
+    year: string | null;
+    color: string | null;
+    engineNumber: string | null;
+  };
   addresses: AttachmentCandidate[];
   phoneNumbers: AttachmentCandidate[];
   emailAddresses: AttachmentCandidate[];
@@ -175,6 +183,8 @@ async function processSingleAttachment(
     clientNames: [],
     policyNumbers: [],
     vehicleRegs: [],
+    vinNumbers: [],
+    vehicleDetails: { make: null, model: null, year: null, color: null, engineNumber: null },
     addresses: [],
     phoneNumbers: [],
     emailAddresses: [],
@@ -194,11 +204,13 @@ async function processSingleAttachment(
       fileName,
       fileType,
       fileSize: content?.length,
-      rawText: rawText.slice(0, 50000), // Limit stored text
+      rawText: rawText, // Full text - no truncation needed (SQLite can handle large strings)
       claimNumbers: JSON.stringify(candidates.claimNumbers),
       clientNames: JSON.stringify(candidates.clientNames),
       policyNumbers: JSON.stringify(candidates.policyNumbers),
       vehicleRegs: JSON.stringify(candidates.vehicleRegs),
+      vinNumbers: JSON.stringify(candidates.vinNumbers),
+      vehicleDetails: JSON.stringify(candidates.vehicleDetails),
       addresses: JSON.stringify(candidates.addresses),
       phoneNumbers: JSON.stringify(candidates.phoneNumbers),
       emailAddresses: JSON.stringify(candidates.emailAddresses),
@@ -345,6 +357,14 @@ function extractCandidates(
   clientNames: AttachmentCandidate[];
   policyNumbers: AttachmentCandidate[];
   vehicleRegs: AttachmentCandidate[];
+  vinNumbers: AttachmentCandidate[];
+  vehicleDetails: {
+    make: string | null;
+    model: string | null;
+    year: string | null;
+    color: string | null;
+    engineNumber: string | null;
+  };
   addresses: AttachmentCandidate[];
   phoneNumbers: AttachmentCandidate[];
   emailAddresses: AttachmentCandidate[];
@@ -356,6 +376,8 @@ function extractCandidates(
     clientNames: extractNames(text),
     policyNumbers: extractPolicyNumbers(text),
     vehicleRegs: extractVehicleRegs(text),
+    vinNumbers: extractVinNumbers(text),
+    vehicleDetails: extractVehicleDetailsFromText(text),
     addresses: extractAddresses(text),
     phoneNumbers: extractPhoneNumbers(text),
     emailAddresses: extractEmails(text),
@@ -474,6 +496,122 @@ function extractVehicleRegs(text: string): AttachmentCandidate[] {
   }
   
   return deduplicateCandidates(candidates);
+}
+
+/**
+ * Extract VIN/Chassis numbers
+ * VIN is 17 alphanumeric characters (no I, O, Q)
+ */
+function extractVinNumbers(text: string): AttachmentCandidate[] {
+  const candidates: AttachmentCandidate[] = [];
+  
+  // Pattern 1: With labels (higher confidence)
+  const labeledPatterns = [
+    { regex: /(?:VIN|Vin|vin)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
+    { regex: /(?:CHASSIS|Chassis|chassis)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 95 },
+    { regex: /(?:Vehicle\s*ID|VehicleID)\s*(?:No|Number|#)?[:\s]*([A-HJ-NPR-Z0-9]{17})/gi, confidence: 90 },
+  ];
+  
+  for (const { regex, confidence } of labeledPatterns) {
+    const matches = text.matchAll(regex);
+    for (const match of matches) {
+      candidates.push({
+        value: match[1].toUpperCase(),
+        confidence,
+        context: match[0],
+      });
+    }
+  }
+  
+  // Pattern 2: Standalone 17-char alphanumeric sequences (lower confidence)
+  const standalonePattern = /\b([A-HJ-NPR-Z0-9]{17})\b/g;
+  const standaloneMatches = text.matchAll(standalonePattern);
+  for (const match of standaloneMatches) {
+    // Check if this VIN wasn't already found with a label
+    const vin = match[1].toUpperCase();
+    if (!candidates.some(c => c.value === vin)) {
+      candidates.push({
+        value: vin,
+        confidence: 70, // Lower confidence for unlabeled VINs
+        context: match[0],
+      });
+    }
+  }
+  
+  return deduplicateCandidates(candidates);
+}
+
+/**
+ * Extract vehicle details (make, model, year, color, engine number)
+ */
+function extractVehicleDetailsFromText(text: string): {
+  make: string | null;
+  model: string | null;
+  year: string | null;
+  color: string | null;
+  engineNumber: string | null;
+} {
+  const result = {
+    make: null as string | null,
+    model: null as string | null,
+    year: null as string | null,
+    color: null as string | null,
+    engineNumber: null as string | null,
+  };
+  
+  // Common vehicle makes
+  const makes = [
+    "Toyota", "Volkswagen", "VW", "BMW", "Mercedes", "Mercedes-Benz", "Ford",
+    "Honda", "Nissan", "Mazda", "Hyundai", "Kia", "Audi", "Volvo", "Lexus",
+    "Isuzu", "Mitsubishi", "Subaru", "Suzuki", "Renault", "Peugeot", "Jeep",
+    "Land Rover", "Jaguar", "Porsche", "Mini", "Fiat", "Chevrolet", "Opel",
+    "Chery", "Haval", "GWM", "Mahindra"
+  ];
+  
+  // Try to find make
+  for (const make of makes) {
+    const makePattern = new RegExp(`\\b(${make})\\b`, "i");
+    if (makePattern.test(text)) {
+      result.make = make;
+      break;
+    }
+  }
+  
+  // Try to find year (4 digits between 1990 and current year + 1)
+  const currentYear = new Date().getFullYear();
+  const yearPattern = /\b((?:19[89]\d|20[0-2]\d))\b/g;
+  const yearMatches = text.match(yearPattern);
+  if (yearMatches) {
+    for (const y of yearMatches) {
+      const yearNum = parseInt(y);
+      if (yearNum >= 1990 && yearNum <= currentYear + 1) {
+        result.year = y;
+        break;
+      }
+    }
+  }
+  
+  // Try to find engine number (usually alphanumeric, 6-12 chars)
+  const enginePattern = /(?:Engine|Eng)\s*(?:No|Number|#|Nr\.?)?[:\s]*([A-Z0-9]{6,12})/i;
+  const engineMatch = text.match(enginePattern);
+  if (engineMatch) {
+    result.engineNumber = engineMatch[1].toUpperCase();
+  }
+  
+  // Try to find color
+  const colors = [
+    "White", "Black", "Silver", "Grey", "Gray", "Blue", "Red", "Green",
+    "Yellow", "Gold", "Bronze", "Brown", "Beige", "Orange", "Purple", "Maroon"
+  ];
+  for (const color of colors) {
+    const colorPattern = new RegExp(`\\b${color}\\b`, "i");
+    if (colorPattern.test(text)) {
+      result.color = color;
+      break;
+    }
+  }
+  
+  return result;
 }
 
 /**
@@ -666,6 +804,8 @@ export async function getEmailAttachmentData(emailId: string): Promise<Attachmen
     clientNames: safeJsonParse(d.clientNames, []),
     policyNumbers: safeJsonParse(d.policyNumbers, []),
     vehicleRegs: safeJsonParse(d.vehicleRegs, []),
+    vinNumbers: safeJsonParse(d.vinNumbers, []),
+    vehicleDetails: safeJsonParse(d.vehicleDetails, { make: null, model: null, year: null, color: null, engineNumber: null }),
     addresses: safeJsonParse(d.addresses, []),
     phoneNumbers: safeJsonParse(d.phoneNumbers, []),
     emailAddresses: safeJsonParse(d.emailAddresses, []),

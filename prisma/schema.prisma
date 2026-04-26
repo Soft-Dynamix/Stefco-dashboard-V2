@@ -988,6 +988,8 @@ model AttachmentData {
   clientNames         String?  // JSON array of candidate names
   policyNumbers       String?  // JSON array of policy numbers
   vehicleRegs         String?  // JSON array of vehicle registrations
+  vinNumbers          String?  // JSON array of VIN/Chassis numbers
+  vehicleDetails      String?  // JSON object with make, model, year, color, engineNumber
   addresses           String?  // JSON array of addresses
   phoneNumbers        String?  // JSON array of phone numbers
   emailAddresses      String?  // JSON array of emails

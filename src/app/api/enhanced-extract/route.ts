@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
       subject || "(No Subject)"
     )
       .replace("{from}", from || "Unknown")
-      .replace("{body}", (bodyText || "").substring(0, 4000));
+      .replace("{body}", (bodyText || "")); // No truncation - need all text for vehicle details
 
     const classificationResponse = await zai.chat.completions.create({
       messages: [{ role: "user", content: classificationPrompt }],
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
         subject || "(No Subject)"
       )
         .replace("{from}", from || "Unknown")
-        .replace("{body}", combinedText.substring(0, 6000))
+        .replace("{body}", combinedText) // No truncation - need all text for vehicle details
         .replace("{hints}", hintsText)
         .replace("{attachmentData}", attachmentData || "No attachment data");
 
