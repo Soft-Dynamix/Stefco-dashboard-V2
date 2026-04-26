@@ -131,9 +131,48 @@ export function InboxSection() {
       .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))); // Decode hex chars
   };
 
+  // Decode base64 encoding (for emails stored before the fix)
+  const decodeBase64 = (str: string | null): string | null => {
+    if (!str) return null;
+    try {
+      // Check if the string looks like base64 encoded content
+      // Base64 strings contain only A-Za-z0-9+/= and whitespace
+      const trimmed = str.trim();
+      if (/^[A-Za-z0-9+/=\s\r\n]+$/.test(trimmed) && trimmed.length > 50) {
+        // Remove whitespace and try to decode
+        const cleaned = trimmed.replace(/\s/g, '');
+        // Check if it's valid base64 length (multiple of 4)
+        if (cleaned.length % 4 === 0 || cleaned.endsWith('=') || cleaned.endsWith('==')) {
+          try {
+            const decoded = atob(cleaned);
+            // Check if decoded content looks like valid text (not binary)
+            if (/^[\x20-\x7E\r\n\t]+$/.test(decoded) || decoded.includes('<') || decoded.includes('html')) {
+              return decoded;
+            }
+          } catch {
+            // Not valid base64, return original
+          }
+        }
+      }
+      return str;
+    } catch {
+      return str;
+    }
+  };
+
+  // Combined decoder that handles both base64 and quoted-printable
+  const decodeEmailContent = (str: string | null): string | null => {
+    if (!str) return null;
+    // First try base64 decoding
+    const base64Decoded = decodeBase64(str);
+    if (base64Decoded !== str) return base64Decoded;
+    // Then try quoted-printable decoding
+    return decodeQuotedPrintable(str);
+  };
+
   // Memoize decoded email content
-  const decodedBodyHtml = useMemo(() => decodeQuotedPrintable(selectedEmail?.bodyHtml || null), [selectedEmail?.bodyHtml]);
-  const decodedBodyText = useMemo(() => decodeQuotedPrintable(selectedEmail?.bodyText || null), [selectedEmail?.bodyText]);
+  const decodedBodyHtml = useMemo(() => decodeEmailContent(selectedEmail?.bodyHtml || null), [selectedEmail?.bodyHtml]);
+  const decodedBodyText = useMemo(() => decodeEmailContent(selectedEmail?.bodyText || null), [selectedEmail?.bodyText]);
 
   useEffect(() => {
     fetchEmails(1);

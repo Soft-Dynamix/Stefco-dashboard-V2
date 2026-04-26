@@ -324,6 +324,23 @@ export async function fetchEmails(limit: number = 50): Promise<{
         const textMatch = source.match(/Content-Type: text\/plain[\s\S]*?\r\n\r\n([\s\S]*?)(?=\r\n--|\r\nContent-|$)/i);
         const htmlMatch = source.match(/Content-Type: text\/html[\s\S]*?\r\n\r\n([\s\S]*?)(?=\r\n--|\r\nContent-|$)/i);
 
+        // Check for Content-Transfer-Encoding in the email source
+        const isBase64Encoded = /Content-Transfer-Encoding:\s*base64/i.test(source);
+
+        // Decode base64 encoding
+        const decodeBase64 = (str: string): string => {
+          try {
+            // Check if the string looks like base64 (only valid base64 chars)
+            if (/^[A-Za-z0-9+/=\s\r\n]+$/.test(str.trim())) {
+              const cleaned = str.replace(/\s/g, ''); // Remove whitespace
+              return Buffer.from(cleaned, 'base64').toString('utf-8');
+            }
+            return str;
+          } catch {
+            return str;
+          }
+        };
+
         // Decode quoted-printable encoding
         const decodeQuotedPrintable = (str: string): string => {
           return str
@@ -331,8 +348,20 @@ export async function fetchEmails(limit: number = 50): Promise<{
             .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))); // Decode hex chars
         };
 
-        if (textMatch) bodyText = decodeQuotedPrintable(textMatch[1]);
-        if (htmlMatch) bodyHtml = decodeQuotedPrintable(htmlMatch[1]);
+        // Decode content based on encoding type
+        const decodeContent = (str: string): string => {
+          if (!str) return str;
+          // First try base64 if detected
+          if (isBase64Encoded) {
+            const decoded = decodeBase64(str);
+            if (decoded !== str) return decoded;
+          }
+          // Then try quoted-printable
+          return decodeQuotedPrintable(str);
+        };
+
+        if (textMatch) bodyText = decodeContent(textMatch[1]);
+        if (htmlMatch) bodyHtml = decodeContent(htmlMatch[1]);
 
         const from = envelope.from?.[0]?.address || envelope.from?.[0]?.name || null;
         const fromEmail = parseEmailAddress(envelope.from?.[0]?.address || envelope.sender?.[0]?.address || null);

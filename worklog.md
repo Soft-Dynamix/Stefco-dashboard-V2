@@ -1049,3 +1049,33 @@ API Changes:
 - New response field: `historicalEmailsIgnored` (number)
 - Uses `updateMany` to efficiently bulk update historical emails
 - Creates audit log entry for tracking bulk operations
+
+---
+
+Task ID: 47
+Agent: Main Agent
+Task: Fix Base64 Encoded Email Body Display Issue
+
+Work Log:
+- User reported email body showing garbled characters (base64 encoded content not decoded)
+- Analyzed screenshot showing content like "Pch0bWw=...", "ZT4NCjYvaW4..." which is base64 encoding
+- Added base64 decoding support to backend email-poller.ts
+- Added client-side base64 decoding fallback in inbox-section.tsx for existing emails
+- Created combined decoder that handles both base64 and quoted-printable encoding
+
+Stage Summary:
+- Email bodies now properly decoded from both base64 and quoted-printable encoding
+- Backend handles new emails coming in with base64 Content-Transfer-Encoding
+- Frontend fallback decodes existing emails already stored with base64 content
+- Combined decoder tries base64 first, then quoted-printable
+
+Files Modified:
+- src/lib/email-poller.ts - Added base64 decoding for emails with Content-Transfer-Encoding: base64
+- src/components/sections/inbox-section.tsx - Added client-side base64 decoding with decodeEmailContent()
+
+Technical Details:
+Base64 encoding is identified by:
+- Content-Transfer-Encoding: base64 header in email source
+- Content containing only A-Za-z0-9+/= characters
+- The content is decoded using Buffer.from(str, 'base64').toString('utf-8') in backend
+- The frontend uses atob() for client-side decoding
