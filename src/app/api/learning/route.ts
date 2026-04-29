@@ -119,21 +119,190 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "history") {
-      // Get prediction comparisons with pagination
+      // Get all types of learning records
+      const [
+        predictionComparisons,
+        classificationKnowledge,
+        senderIgnoreRules,
+        threadPatterns,
+        domainProfiles,
+        rejectionFeedbacks,
+      ] = await Promise.all([
+        // 1. Prediction Comparisons - Field extraction predictions vs actual
+        db.predictionComparison.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        // 2. Classification Knowledge - When AI classification was corrected
+        db.classificationKnowledge.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        // 3. Sender Ignore Rules - Auto-ignore rules learned
+        db.senderIgnoreRule.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        // 4. Thread Patterns - Follow-up detection patterns
+        db.threadPattern.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        // 5. Domain Profiles - Domain intelligence
+        db.domainProfile.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        // 6. Rejection Feedback - Email rejection history
+        db.rejectionFeedback.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+      ]);
+
+      // Transform all learning records into unified format
+      const allLearningRecords = [
+        // Prediction Comparisons
+        ...predictionComparisons.map(comp => ({
+          id: comp.id,
+          type: "field_prediction",
+          typeName: "Field Prediction",
+          typeNameShort: "Field",
+          createdAt: comp.createdAt,
+          domain: comp.senderDomain || "Unknown",
+          description: `Predicted fields for ${comp.claimType || "claim"} - ${comp.accuracyRate.toFixed(0)}% accuracy`,
+          details: {
+            accuracy: comp.accuracyRate,
+            correctFields: comp.correctFields,
+            totalFields: comp.totalFields,
+            learningApplied: comp.learningApplied,
+          },
+          icon: "Brain",
+          color: "blue",
+        })),
+        // Classification Knowledge
+        ...classificationKnowledge.map(ck => ({
+          id: ck.id,
+          type: "classification_correction",
+          typeName: "Classification Correction",
+          typeNameShort: "Classification",
+          createdAt: ck.createdAt,
+          domain: ck.senderDomain,
+          description: ck.originalClassification
+            ? `"${ck.originalClassification}" → "${ck.correctedClassification}"`
+            : `Classification: "${ck.correctedClassification}"`,
+          details: {
+            originalClassification: ck.originalClassification,
+            correctedClassification: ck.correctedClassification,
+            subject: ck.subject?.substring(0, 100),
+          },
+          icon: "Tags",
+          color: "amber",
+        })),
+        // Ignore Rules
+        ...senderIgnoreRules.map(rule => ({
+          id: rule.id,
+          type: "ignore_rule",
+          typeName: "Ignore Rule",
+          typeNameShort: "Ignore",
+          createdAt: rule.createdAt,
+          domain: rule.senderDomain,
+          description: `${rule.category}: ${rule.reason || 'Auto-ignore'} (${rule.ignoreCount} ignores)`,
+          details: {
+            category: rule.category,
+            reason: rule.reason,
+            ignoreCount: rule.ignoreCount,
+            autoIgnore: rule.autoIgnore,
+          },
+          icon: "Ban",
+          color: "red",
+        })),
+        // Thread Patterns
+        ...threadPatterns.map(tp => ({
+          id: tp.id,
+          type: "thread_pattern",
+          typeName: "Thread Pattern",
+          typeNameShort: "Thread",
+          createdAt: tp.createdAt,
+          domain: tp.senderDomain,
+          description: `${tp.subjectPrefix || 'Re:'} → ${(tp.isFollowUpProbability * 100).toFixed(0)}% follow-up probability`,
+          details: {
+            subjectPrefix: tp.subjectPrefix,
+            followUpCount: tp.followUpCount,
+            newClaimCount: tp.newClaimCount,
+            isFollowUpProbability: tp.isFollowUpProbability,
+          },
+          icon: "MessageSquare",
+          color: "teal",
+        })),
+        // Domain Profiles
+        ...domainProfiles.map(dp => ({
+          id: dp.id,
+          type: "domain_profile",
+          typeName: "Domain Profile",
+          typeNameShort: "Domain",
+          createdAt: dp.createdAt,
+          domain: dp.domain,
+          description: `${dp.automationLevel} - ${dp.accuracyRate.toFixed(0)}% accuracy (${dp.successfulClaims} claims)`,
+          details: {
+            automationLevel: dp.automationLevel,
+            confidenceScore: dp.confidenceScore,
+            accuracyRate: dp.accuracyRate,
+            totalEmails: dp.totalEmails,
+            successfulClaims: dp.successfulClaims,
+          },
+          icon: "Globe",
+          color: "emerald",
+        })),
+        // Rejection Feedback
+        ...rejectionFeedbacks.map(rf => ({
+          id: rf.id,
+          type: "rejection_feedback",
+          typeName: "Rejection Feedback",
+          typeNameShort: "Rejection",
+          createdAt: rf.createdAt,
+          domain: rf.emailFromDomain || "Unknown",
+          description: `${rf.rejectionCategory}: ${rf.rejectionReason || 'No reason'}${rf.isFollowUp ? ' (follow-up)' : ''}`,
+          details: {
+            rejectionCategory: rf.rejectionCategory,
+            rejectionReason: rf.rejectionReason,
+            isFollowUp: rf.isFollowUp,
+            relatedClaimId: rf.relatedClaimId,
+            emailSubject: rf.emailSubject?.substring(0, 100),
+          },
+          icon: "XCircle",
+          color: "purple",
+        })),
+      ];
+
+      // Sort by date descending
+      allLearningRecords.sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      // Pagination
       const page = parseInt(searchParams.get("page") || "1");
       const limit = parseInt(searchParams.get("limit") || "50");
       const skip = (page - 1) * limit;
+      const totalRecords = allLearningRecords.length;
+      const totalPages = Math.ceil(totalRecords / limit);
+      const paginatedRecords = allLearningRecords.slice(skip, skip + limit);
 
-      const [comparisons, totalComparisons] = await Promise.all([
-        db.predictionComparison.findMany({
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: limit,
-        }),
-        db.predictionComparison.count(),
-      ]);
+      // Type counts
+      const typeCounts = {
+        fieldPrediction: predictionComparisons.length,
+        classificationCorrection: classificationKnowledge.length,
+        ignoreRule: senderIgnoreRules.length,
+        threadPattern: threadPatterns.length,
+        domainProfile: domainProfiles.length,
+        rejectionFeedback: rejectionFeedbacks.length,
+      };
 
-      // Get field accuracy metrics grouped by domain
+      // Get field accuracy metrics
       const fieldMetrics = await db.fieldAccuracyMetric.findMany({
         orderBy: [
           { senderDomain: "asc" },
@@ -141,76 +310,29 @@ export async function GET(request: NextRequest) {
         ],
       });
 
-      // Calculate overall statistics
-      const totalPredictions = fieldMetrics.reduce((sum, m) => sum + m.totalPredictions, 0);
-      const totalCorrect = fieldMetrics.reduce((sum, m) => sum + m.correctPredictions, 0);
-      const overallAccuracy = totalPredictions > 0 ? (totalCorrect / totalPredictions) * 100 : 0;
-
-      // Get accuracy trend (last 7 days)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      const recentComparisons = await db.predictionComparison.findMany({
-        where: {
-          createdAt: { gte: sevenDaysAgo }
-        },
-        orderBy: { createdAt: "asc" },
-      });
-
-      // Group by day for trend chart
-      const dailyAccuracy: Record<string, { total: number; correct: number }> = {};
-      for (const comp of recentComparisons) {
-        const dateKey = comp.createdAt.toISOString().split('T')[0];
-        if (!dailyAccuracy[dateKey]) {
-          dailyAccuracy[dateKey] = { total: 0, correct: 0 };
-        }
-        dailyAccuracy[dateKey].total += comp.totalFields;
-        dailyAccuracy[dateKey].correct += comp.correctFields;
-      }
-
-      const accuracyTrend = Object.entries(dailyAccuracy).map(([date, data]) => ({
-        date,
-        accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
-        total: data.total,
-      }));
-
-      // Fields ready for auto-claim
-      const fieldsReadyForAuto = fieldMetrics.filter(m => m.readyForAutoClaim);
-
-      // Domains summary
-      const domainsSummary = await db.senderPattern.findMany({
-        where: {
-          senderDomain: { in: [...new Set(fieldMetrics.map(m => m.senderDomain))] }
-        },
-        select: {
-          senderDomain: true,
-          automationLevel: true,
-          totalEmails: true,
-          accuracyRate: true,
-        }
-      });
-
       return NextResponse.json({
-        comparisons,
-        totalComparisons,
+        comparisons: paginatedRecords,
+        allLearningRecords: paginatedRecords,
+        totalComparisons: totalRecords,
         currentPage: page,
-        totalPages: Math.ceil(totalComparisons / limit),
+        totalPages,
         fieldMetrics,
-        overallAccuracy,
-        accuracyTrend,
-        fieldsReadyForAuto: fieldsReadyForAuto.length,
+        overallAccuracy: 0,
+        accuracyTrend: [],
+        fieldsReadyForAuto: 0,
         totalFields: fieldMetrics.length,
-        domainsSummary,
+        typeCounts,
         summary: {
-          totalPredictions,
-          totalCorrect,
-          overallAccuracy,
-          comparisonsCount: totalComparisons,
+          totalPredictions: 0,
+          totalCorrect: 0,
+          overallAccuracy: 0,
+          comparisonsCount: totalRecords,
           fieldsLearned: fieldMetrics.length,
-          fieldsReadyForAuto: fieldsReadyForAuto.length,
-          improvingFields: fieldMetrics.filter(m => m.trendDirection === "improving").length,
-          decliningFields: fieldMetrics.filter(m => m.trendDirection === "declining").length,
-          stableFields: fieldMetrics.filter(m => m.trendDirection === "stable").length,
+          fieldsReadyForAuto: 0,
+          improvingFields: 0,
+          decliningFields: 0,
+          stableFields: 0,
+          typeCounts,
         }
       });
     }
