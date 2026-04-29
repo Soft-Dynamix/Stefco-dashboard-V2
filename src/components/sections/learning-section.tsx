@@ -192,8 +192,22 @@ interface AccuracyTrendItem {
   total: number;
 }
 
+interface LearningRecord {
+  id: string;
+  type: string;
+  typeName: string;
+  typeNameShort: string;
+  createdAt: string;
+  domain: string;
+  description: string;
+  details: Record<string, unknown>;
+  icon: string;
+  color: string;
+}
+
 interface LearningHistoryData {
-  comparisons: PredictionComparisonItem[];
+  comparisons: LearningRecord[];
+  allLearningRecords: LearningRecord[];
   totalComparisons: number;
   currentPage: number;
   totalPages: number;
@@ -202,12 +216,14 @@ interface LearningHistoryData {
   accuracyTrend: AccuracyTrendItem[];
   fieldsReadyForAuto: number;
   totalFields: number;
-  domainsSummary: Array<{
-    senderDomain: string;
-    automationLevel: string;
-    totalEmails: number;
-    accuracyRate: number;
-  }>;
+  typeCounts: {
+    fieldPrediction: number;
+    classificationCorrection: number;
+    ignoreRule: number;
+    threadPattern: number;
+    domainProfile: number;
+    rejectionFeedback: number;
+  };
   summary: {
     totalPredictions: number;
     totalCorrect: number;
@@ -218,6 +234,14 @@ interface LearningHistoryData {
     improvingFields: number;
     decliningFields: number;
     stableFields: number;
+    typeCounts: {
+      fieldPrediction: number;
+      classificationCorrection: number;
+      ignoreRule: number;
+      threadPattern: number;
+      domainProfile: number;
+      rejectionFeedback: number;
+    };
   };
 }
 
@@ -730,15 +754,55 @@ export function LearningSection() {
               </Card>
             </div>
 
-            {/* Prediction Comparisons Table */}
+            {/* Type Counts Summary */}
+            <div className="grid gap-4 md:grid-cols-6">
+              <Card className="border-blue-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-blue-600">{learningHistory?.typeCounts?.fieldPrediction || 0}</div>
+                  <p className="text-xs text-muted-foreground">Field Predictions</p>
+                </CardContent>
+              </Card>
+              <Card className="border-amber-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-amber-600">{learningHistory?.typeCounts?.classificationCorrection || 0}</div>
+                  <p className="text-xs text-muted-foreground">Classifications</p>
+                </CardContent>
+              </Card>
+              <Card className="border-red-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-red-600">{learningHistory?.typeCounts?.ignoreRule || 0}</div>
+                  <p className="text-xs text-muted-foreground">Ignore Rules</p>
+                </CardContent>
+              </Card>
+              <Card className="border-teal-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-teal-600">{learningHistory?.typeCounts?.threadPattern || 0}</div>
+                  <p className="text-xs text-muted-foreground">Thread Patterns</p>
+                </CardContent>
+              </Card>
+              <Card className="border-emerald-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-emerald-600">{learningHistory?.typeCounts?.domainProfile || 0}</div>
+                  <p className="text-xs text-muted-foreground">Domain Profiles</p>
+                </CardContent>
+              </Card>
+              <Card className="border-purple-500/30">
+                <CardContent className="pt-4">
+                  <div className="text-lg font-bold text-purple-600">{learningHistory?.typeCounts?.rejectionFeedback || 0}</div>
+                  <p className="text-xs text-muted-foreground">Rejections</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Learning History Table */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <History className="h-5 w-5 text-blue-500" />
-                  AI Prediction vs Human Correction
+                  Learning History
                 </CardTitle>
                 <CardDescription>
-                  What the AI guessed vs what the human actually entered - this is how the system learns
+                  All learning events recorded by the system - classification corrections, ignore rules, thread patterns, and more
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -746,7 +810,7 @@ export function LearningSection() {
                   <div className="text-center py-8 text-muted-foreground">
                     <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No learning history yet.</p>
-                    <p className="text-sm">When you create claims, the AI will compare its predictions with your input and learn from differences.</p>
+                    <p className="text-sm">When you reject emails or correct AI predictions, the system will learn and record those events here.</p>
                   </div>
                 ) : (
                   <>
@@ -755,89 +819,61 @@ export function LearningSection() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Date</TableHead>
+                            <TableHead>Type</TableHead>
                             <TableHead>Domain</TableHead>
-                            <TableHead>Claim Type</TableHead>
-                            <TableHead>Accuracy</TableHead>
-                            <TableHead>Fields</TableHead>
-                            <TableHead>Learning Applied</TableHead>
+                            <TableHead>Description</TableHead>
                             <TableHead>Details</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {learningHistory?.comparisons.map((comp) => (
-                            <TableRow key={comp.id}>
-                              <TableCell className="text-sm">
-                                {new Date(comp.createdAt).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {comp.senderDomain || "Unknown"}
-                              </TableCell>
-                              <TableCell>
-                                {comp.claimType ? (
-                                  <Badge variant="outline">{comp.claimType}</Badge>
-                                ) : "-"}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Progress 
-                                    value={comp.accuracyRate} 
-                                    className={`w-16 ${comp.accuracyRate >= 80 ? 'bg-green-100' : comp.accuracyRate >= 50 ? 'bg-yellow-100' : 'bg-red-100'}`}
-                                  />
-                                  <span className={comp.accuracyRate >= 80 ? 'text-green-600' : comp.accuracyRate >= 50 ? 'text-yellow-600' : 'text-red-600'}>
-                                    {comp.accuracyRate.toFixed(0)}%
+                          {learningHistory?.comparisons.map((record) => {
+                            const colorClasses: Record<string, string> = {
+                              blue: 'text-blue-600 bg-blue-50 border-blue-200',
+                              amber: 'text-amber-600 bg-amber-50 border-amber-200',
+                              red: 'text-red-600 bg-red-50 border-red-200',
+                              teal: 'text-teal-600 bg-teal-50 border-teal-200',
+                              emerald: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+                              purple: 'text-purple-600 bg-purple-50 border-purple-200',
+                            };
+                            const badgeClass = colorClasses[record.color] || 'text-gray-600 bg-gray-50 border-gray-200';
+                            
+                            return (
+                              <TableRow key={record.id}>
+                                <TableCell className="text-sm whitespace-nowrap">
+                                  {new Date(record.createdAt).toLocaleDateString()} {' '}
+                                  <span className="text-muted-foreground text-xs">
+                                    {new Date(record.createdAt).toLocaleTimeString()}
                                   </span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-green-600">{comp.correctFields}</span>
-                                <span className="text-muted-foreground">/{comp.totalFields}</span>
-                              </TableCell>
-                              <TableCell>
-                                {comp.learningApplied ? (
-                                  <Badge className="bg-green-500">Learned</Badge>
-                                ) : (
-                                  <Badge variant="secondary">Pending</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <details className="cursor-pointer">
-                                  <summary className="text-sm text-blue-500 hover:text-blue-700">
-                                    View fields
-                                  </summary>
-                                  <div className="mt-2 p-2 bg-muted rounded text-xs space-y-1">
-                                    {(() => {
-                                      try {
-                                        const fields: FieldComparison[] = JSON.parse(comp.comparisons);
-                                        return fields.map((f, i) => (
-                                          <div key={i} className={`flex items-center gap-2 ${f.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                                            {f.isCorrect ? (
-                                              <CheckCircle className="h-3 w-3" />
-                                            ) : (
-                                              <XIcon className="h-3 w-3" />
-                                            )}
-                                            <span className="font-medium">{f.field}:</span>
-                                            {!f.isCorrect && f.predicted && (
-                                              <span className="line-through text-muted-foreground">
-                                                "{String(f.predicted).substring(0, 30)}"
-                                              </span>
-                                            )}
-                                            {!f.isCorrect && f.actual && (
-                                              <span>→ "{String(f.actual).substring(0, 30)}"</span>
-                                            )}
-                                            {f.isCorrect && f.actual && (
-                                              <span>"{String(f.actual).substring(0, 30)}"</span>
-                                            )}
-                                          </div>
-                                        ));
-                                      } catch {
-                                        return <span className="text-muted-foreground">Error parsing fields</span>;
-                                      }
-                                    })()}
-                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={`${badgeClass} border`}>{record.typeNameShort}</Badge>
+                                </TableCell>
+                                <TableCell className="font-medium max-w-[150px] truncate">
+                                  {record.domain}
+                                </TableCell>
+                                <TableCell className="max-w-[300px]">
+                                  <span className="text-sm">{record.description}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <details className="cursor-pointer">
+                                    <summary className="text-sm text-blue-500 hover:text-blue-700">
+                                      View details
+                                    </summary>
+                                    <div className="mt-2 p-2 bg-muted rounded text-xs space-y-1">
+                                      {Object.entries(record.details).map(([key, value]) => (
+                                        <div key={key} className="flex gap-2">
+                                          <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span>
+                                          <span className="text-muted-foreground">
+                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
                                 </details>
                               </TableCell>
                             </TableRow>
-                          ))}
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </ScrollArea>
