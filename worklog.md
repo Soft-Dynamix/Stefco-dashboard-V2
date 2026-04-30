@@ -309,7 +309,7 @@ Work Log:
   - `pdfAnalysis.processingError` now passed to `processingError` variable
   - Stored in database for display in UI
 - **Fix 4**: Updated LLM prompt for password-protected PDFs
-  - Shows warning: "⚠️ This PDF is PASSWORD-PROTECTED and cannot be analyzed"
+  - Shows warning: "This PDF is PASSWORD-PROTECTED and cannot be analyzed"
   - Recommends requesting unlocked version from sender
   - Classification still happens based on filename
 
@@ -413,3 +413,77 @@ Stage Summary:
 - Both backend and frontend now have robust JSON error handling
 - Lint check passes (1 pre-existing warning about image alt prop)
 - Dev server running correctly
+
+---
+Task ID: 14
+Agent: Main Agent
+Task: Session continuation - Server restart and documentation
+
+Work Log:
+- Restarted Next.js development server (sandbox environment kills background processes)
+- Verified database contains learning history data:
+  - 12 Classification Corrections
+  - 45 Ignore Rules
+  - 12 Thread Patterns
+  - 3 Domain Profiles
+  - 47 Rejection Feedback records
+  - Total: 119 learning records
+- Investigated learning history display - data exists and API returns correctly
+- Server stability issue identified: sandbox environment terminates background processes after inactivity
+
+Stage Summary:
+- Dev server restart procedure documented
+- Learning history confirmed working with 119 records
+- Environment limitation noted: background processes get killed
+- Workaround: restart server when preview shows Z icon
+
+---
+## Current Project Status (2025-04-27)
+
+### Completed Features
+1. **Email Processing Pipeline**
+   - IMAP email polling with auto-classification
+   - Attachment extraction and storage (base64)
+   - PDF parsing with password protection handling
+   - Bulk operations (archive, delete)
+   - HTML email rendering
+
+2. **AI Analysis System**
+   - Multi-agent AI pipeline (Classification, Extraction, Decision)
+   - VLM-based attachment analysis
+   - Document classification (15 types)
+   - Claim form extraction
+   - Policy schedule extraction
+   - Claim likelihood scoring
+
+3. **Learning Engine**
+   - Pattern learning from corrections
+   - Sender domain profiling
+   - Thread pattern detection
+   - Auto-ignore rules
+   - Field accuracy metrics
+   - Learning history tracking
+
+4. **Claims Management**
+   - Full CRUD operations
+   - Status tracking
+   - Insurance company mapping
+   - Print queue integration
+   - Audit logging
+
+### Known Issues
+1. **Sandbox Environment**: Background processes (dev server) get killed after inactivity
+   - Workaround: Restart server manually when needed
+
+### Database Statistics
+- Claims: Multiple records
+- Email Queue: Active emails pending processing
+- Learning Patterns: 119 records total
+- Insurance Companies: 40+ pre-seeded
+- Audit Logs: Full activity tracking
+
+### Next Steps
+1. Production deployment preparation
+2. Performance optimization
+3. Additional insurance company patterns
+4. Enhanced reporting features
